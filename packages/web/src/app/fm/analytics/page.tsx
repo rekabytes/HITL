@@ -26,6 +26,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const [roomRows, room] = await Promise.all([listRooms(), roomCode ? findRoomByCode(roomCode) : null]);
 
   const since = new Date(Date.now() - range.hours * 3_600_000);
+  // Raw SQL goes straight to postgres-js, which needs a string, not a Date.
+  const sinceIso = since.toISOString();
   const tz = env.timeZone;
   const roomFilter: SQL = room ? sql`and room_id = ${room.id}` : sql``;
   const voteBucket = rangeKey === "24h" ? "hour" : "day";
@@ -40,7 +42,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                round(avg(temperature_c)::numeric, 1)::float as t,
                round(avg(humidity_pct)::numeric, 0)::float as h
         from sensor_readings
-        where recorded_at >= ${since} ${roomFilter}
+        where recorded_at >= ${sinceIso}::timestamptz ${roomFilter}
         group by 1
       ) x order by b`),
     db().execute<{ label: string; too_cold: number; perfect: number; too_hot: number }>(sql`
@@ -50,7 +52,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                count(*) filter (where vote = 'perfect')::int as perfect,
                count(*) filter (where vote = 'too_hot')::int as too_hot
         from feedback
-        where created_at >= ${since} ${roomFilter}
+        where created_at >= ${sinceIso}::timestamptz ${roomFilter}
         group by 1
       ) x order by b`),
     // How people vote at each whole degree: this is what the comfort model learns from.
@@ -60,7 +62,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
              count(*) filter (where vote = 'perfect')::int as perfect,
              count(*) filter (where vote = 'too_hot')::int as too_hot
       from feedback
-      where temperature_c is not null and created_at >= ${since} ${roomFilter}
+      where temperature_c is not null and created_at >= ${sinceIso}::timestamptz ${roomFilter}
       group by floor(temperature_c)
       order by floor(temperature_c)`),
   ]);

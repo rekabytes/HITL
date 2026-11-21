@@ -4,7 +4,8 @@
 services:
   postgres:
     ports:
-      - "5432:5432"
+      # Set POSTGRES_HOST_PORT if 5432 is already used on your machine.
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
   redis:
     ports:
       - "6379:6379"

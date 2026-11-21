@@ -64,7 +64,7 @@ export default async function RoomsPage() {
                 {buildingRows.map((b) => (
                   <tr key={b.id}>
                     <td><strong>{b.name}</strong>{b.address && <div className="small muted">{b.address}</div>}</td>
-                    <td className="num small">{roomCount(b.id)} rooms</td>
+                    <td className="num small">{roomCount(b.id)} {roomCount(b.id) === 1 ? "room" : "rooms"}</td>
                     <td>
                       {roomCount(b.id) === 0 && (
                         <ActionForm action={deleteBuildingAction} submitLabel="Delete" variant="ghost" className="form-inline">

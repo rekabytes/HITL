@@ -13,7 +13,8 @@
     "migrate": "tsx scripts/migrate.ts",
     "studio": "drizzle-kit studio",
     "prune-readings": "tsx scripts/prune.ts",
-    "import-mongo": "tsx scripts/import-mongo.ts"
+    "import-mongo": "tsx scripts/import-mongo.ts",
+    "seed-demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@hitl/shared": "workspace:*",

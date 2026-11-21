@@ -59,6 +59,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 /* ---------- panels and grids ---------- */
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
 .panel + .panel, .stack > * + * { margin-top: 1.25rem; }
+.grid > .panel + .panel { margin-top: 0; }
 .grid { display: grid; gap: 1rem; }
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 .grid-cards { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
