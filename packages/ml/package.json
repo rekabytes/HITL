@@ -1,0 +1,10 @@
+{
+  "name": "@hitl/ml",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Python comfort model service. Not a Node package; this file lets pnpm scripts reach it.",
+  "scripts": {
+    "dev": "uvicorn app.main:app --reload --port 8000",
+    "test": "python -m pytest -q"
+  }
+}

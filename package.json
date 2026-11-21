@@ -1,0 +1,23 @@
+{
+  "name": "hitl",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @hitl/web dev",
+    "build": "pnpm -r build",
+    "check": "pnpm -r check",
+    "env:setup": "node scripts/setup-env.mjs",
+    "docker:up": "docker compose up --build",
+    "docker:dev": "docker compose -f compose.yaml -f compose.dev.yaml up --build",
+    "docker:down": "docker compose down",
+    "db:generate": "pnpm --filter @hitl/db generate",
+    "db:migrate": "pnpm --filter @hitl/db migrate",
+    "db:studio": "pnpm --filter @hitl/db studio",
+    "db:prune": "pnpm --filter @hitl/db prune-readings",
+    "db:import-mongo": "pnpm --filter @hitl/db import-mongo"
+  }
+}

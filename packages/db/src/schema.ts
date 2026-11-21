@@ -1,0 +1,198 @@
+import { sql } from "drizzle-orm";
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_STATUSES, ROLES, THERMAL_VOTES } from "@hitl/shared";
+
+const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+
+export const roleEnum = pgEnum("role", ROLES);
+export const thermalVoteEnum = pgEnum("thermal_vote", THERMAL_VOTES);
+export const alertKindEnum = pgEnum("alert_kind", ALERT_KINDS);
+export const alertSeverityEnum = pgEnum("alert_severity", ALERT_SEVERITIES);
+export const alertStatusEnum = pgEnum("alert_status", ALERT_STATUSES);
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  role: roleEnum("role").notNull(),
+  active: boolean("active").notNull().default(true),
+  /** Set when an admin resets a password; the user must pick a new one at next login. */
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    /** "web" sessions live in a cookie, "mobile" ones are bearer tokens. */
+    kind: text("kind", { enum: ["web", "mobile"] }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("sessions_user_idx").on(t.userId)],
+);
+
+export const buildings = pgTable("buildings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  address: text("address"),
+  createdAt: createdAt(),
+});
+
+export const rooms = pgTable(
+  "rooms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    buildingId: uuid("building_id")
+      .notNull()
+      .references(() => buildings.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    /** Value printed in the room's QR code, for example "BK-01". */
+    code: text("code").notNull().unique(),
+    floor: text("floor"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("rooms_building_name_idx").on(t.buildingId, t.name)],
+);
+
+export const sensors = pgTable("sensors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "set null" }),
+  deviceId: text("device_id").notNull().unique(),
+  /** HMAC of the device key. The plain key is shown once when it is created. */
+  keyHash: text("key_hash").notNull().unique(),
+  label: text("label"),
+  active: boolean("active").notNull().default(true),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+export const sensorReadings = pgTable(
+  "sensor_readings",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    sensorId: uuid("sensor_id").references(() => sensors.id, { onDelete: "set null" }),
+    roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }),
+    temperatureC: real("temperature_c").notNull(),
+    humidityPct: real("humidity_pct").notNull(),
+    pressureHpa: real("pressure_hpa"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("readings_room_time_idx").on(t.roomId, t.recordedAt.desc()),
+    index("readings_time_idx").on(t.recordedAt),
+  ],
+);
+
+export const feedback = pgTable(
+  "feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    vote: thermalVoteEnum("vote").notNull(),
+    comfortable: boolean("comfortable").notNull(),
+    comment: text("comment").notNull().default(""),
+    /** Room conditions when the vote was cast. This pairing is the ML training data. */
+    temperatureC: real("temperature_c"),
+    humidityPct: real("humidity_pct"),
+    source: text("source", { enum: ["mobile", "web", "import"] }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("feedback_room_time_idx").on(t.roomId, t.createdAt.desc())],
+);
+
+/** Person in charge of a room (one per room). */
+export const pics = pgTable("pics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roomId: uuid("room_id")
+    .notNull()
+    .unique()
+    .references(() => rooms.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  createdAt: createdAt(),
+});
+
+export const alerts = pgTable(
+  "alerts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }),
+    kind: alertKindEnum("kind").notNull(),
+    severity: alertSeverityEnum("severity").notNull(),
+    status: alertStatusEnum("status").notNull().default("open"),
+    message: text("message").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolutionNote: text("resolution_note"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("alerts_status_idx").on(t.status, t.createdAt.desc()),
+    // At most one unresolved alert per room and kind, so automatic checks never pile up duplicates.
+    uniqueIndex("alerts_one_open_per_room_kind")
+      .on(t.roomId, t.kind)
+      .where(sql`${t.status} <> 'resolved' and ${t.kind} <> 'manual'`),
+  ],
+);
+
+/** What a facility manager did about a room or an alert. */
+export const actions = pgTable(
+  "actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }),
+    alertId: uuid("alert_id").references(() => alerts.id, { onDelete: "set null" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    note: text("note").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("actions_room_idx").on(t.roomId, t.createdAt.desc())],
+);
+
+export const modelRuns = pgTable("model_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  status: text("status", { enum: ["running", "succeeded", "failed", "skipped"] }).notNull(),
+  algorithm: text("algorithm"),
+  trainingRows: integer("training_rows").notNull().default(0),
+  metrics: jsonb("metrics").$type<Record<string, unknown>>(),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
+export type User = typeof users.$inferSelect;
+export type Room = typeof rooms.$inferSelect;
+export type Building = typeof buildings.$inferSelect;
+export type Sensor = typeof sensors.$inferSelect;
+export type SensorReading = typeof sensorReadings.$inferSelect;
+export type Feedback = typeof feedback.$inferSelect;
+export type Alert = typeof alerts.$inferSelect;
+export type Pic = typeof pics.$inferSelect;
+export type ModelRun = typeof modelRuns.$inferSelect;

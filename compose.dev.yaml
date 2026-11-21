@@ -1,0 +1,13 @@
+# Dev override: exposes Postgres, Redis and ml on localhost so `pnpm dev` can run
+# the web app outside Docker.
+#   docker compose -f compose.yaml -f compose.dev.yaml up postgres redis migrate ml
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+  redis:
+    ports:
+      - "6379:6379"
+  ml:
+    ports:
+      - "8000:8000"

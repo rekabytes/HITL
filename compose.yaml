@@ -1,0 +1,83 @@
+name: hitl
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hitl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-hitl}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hitl} -d ${POSTGRES_DB:-hitl}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: packages/db/Dockerfile
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-hitl}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hitl}
+      READINGS_RETENTION_DAYS: ${READINGS_RETENTION_DAYS:-180}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  ml:
+    build:
+      context: packages/ml
+    restart: unless-stopped
+    environment:
+      ML_TOKEN: ${ML_TOKEN:?set ML_TOKEN in .env}
+      ML_MIN_TRAINING_ROWS: ${ML_MIN_TRAINING_ROWS:-30}
+      ML_HEURISTIC_SETPOINT_C: ${ML_HEURISTIC_SETPOINT_C:-24.5}
+      MODEL_DIR: /data
+    volumes:
+      - mldata:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-hitl}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hitl}
+      REDIS_URL: redis://redis:6379
+      ML_URL: http://ml:8000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      ml:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  mldata:

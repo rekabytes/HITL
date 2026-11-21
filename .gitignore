@@ -1,0 +1,25 @@
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Trained models are built at runtime, never committed
+*.pkl
+*.joblib
+packages/ml/data/
+
+.DS_Store

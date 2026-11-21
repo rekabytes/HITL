@@ -1,0 +1,32 @@
+{
+  "name": "@hitl/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx scripts/migrate.ts",
+    "studio": "drizzle-kit studio",
+    "prune-readings": "tsx scripts/prune.ts",
+    "import-mongo": "tsx scripts/import-mongo.ts"
+  },
+  "dependencies": {
+    "@hitl/shared": "workspace:*",
+    "drizzle-orm": "^0.44.0",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^17.2.0",
+    "drizzle-kit": "^0.31.0",
+    "mongodb": "^6.18.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3"
+  }
+}
