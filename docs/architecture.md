@@ -18,13 +18,15 @@
 
 ## Request flows
 
-**Sensor reading.** The ESP32 posts JSON with its device key. `web` looks up the key's HMAC in `sensors`, so the reading lands in the right room. It writes the row to `sensor_readings`, stores the latest reading in Redis, publishes it on the `hitl:live` channel and checks the comfort band for alerts.
+**Sensor reading.** The ESP32 posts JSON with its device key. `web` looks up the key's HMAC in `sensors`, so the reading lands in the rooms that sensor covers. It writes one row per room to `sensor_readings`, stores the latest reading in Redis, publishes it on the `hitl:live` channel and checks the comfort band for alerts.
 
 **Occupant vote.** The mobile app scans the room's QR code (it holds the room code) and posts the vote with a bearer token. `web` attaches the room's current temperature and humidity to the vote if the last reading is under 30 minutes old. That pairing is the training data. It then checks whether most recent votes say too hot or too cold, which opens an alert, and starts a retrain once 50 new labelled votes have come in.
 
 **Dashboard.** The facility manager dashboard renders from Postgres and Redis on the server, then opens `/api/stream`. That route subscribes to `hitl:live` and forwards readings, votes and alerts as server-sent events, so the room cards update without polling.
 
-**Recommendations.** Rules in `@hitl/shared` turn the reading, the comfort band and recent votes into advice. Votes win over the sensor when at least three people agree. The `ml` service adds a comfort score next to the advice. Predictions are cached for 30 seconds per room.
+**Alerts.** Alerts open automatically (out-of-band readings, most recent votes too hot or too cold, a sensor gone quiet) or by hand. Either way the room's person in charge gets an email, staff can send it again with Re-notify, and an alert still unacknowledged after `ALERT_ESCALATE_AFTER_MIN` minutes becomes critical and is emailed again as an escalation. The escalation check runs on each sensor reading and when the dashboard or alerts page loads; one database update claims each alert, so it is never sent twice.
+
+**Recommendations.** Rules in `@hitl/shared` turn the reading, the comfort band and recent votes into advice. Votes win over the sensor when at least three people agree. The `ml` service adds a comfort score next to the advice. Predictions are cached for 30 seconds per room. An energy line shows overcooling: degrees below the comfort band times about 7% extra cooling per degree, a common facility rule of thumb. It is an estimate from temperature, not a meter reading.
 
 ## What Redis is for
 

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
-import { buildings, feedback, rooms, sensorReadings, sensors, type Room, type Sensor } from "@hitl/db";
+import { buildings, feedback, rooms, sensorReadings, sensorRooms, sensors, type Room, type Sensor } from "@hitl/db";
 import { recommend, type FeedbackTally, type Recommendation, type SensorReadingInput } from "@hitl/shared";
-import { checkReadingAlerts } from "./alerts";
+import { checkReadingAlerts, escalateStaleAlerts } from "./alerts";
 import { db } from "./db";
 import { env } from "./env";
 import { predict, type Prediction } from "./ml";
@@ -21,33 +21,44 @@ const STATUS_TTL_SEC = 30;
 /** A reading older than this is too stale to pair with a vote or to advise on. */
 export const FRESH_MIN = 30;
 
+export async function sensorRoomIds(sensorId: string): Promise<string[]> {
+  const rows = await db().select({ roomId: sensorRooms.roomId }).from(sensorRooms).where(eq(sensorRooms.sensorId, sensorId));
+  return rows.map((r) => r.roomId);
+}
+
+/** Stores one reading row per room the sensor covers (or one unassigned row), then updates caches and alerts. */
 export async function ingestReading(sensor: Sensor, input: SensorReadingInput) {
   const recordedAt = new Date();
-  await db().insert(sensorReadings).values({
+  const roomIds = await sensorRoomIds(sensor.id);
+  const base = {
     sensorId: sensor.id,
-    roomId: sensor.roomId,
     temperatureC: input.temperature,
     humidityPct: input.humidity,
     pressureHpa: input.pressure ?? null,
     recordedAt,
-  });
-  await db().update(sensors).set({ lastSeenAt: recordedAt }).where(eq(sensors.id, sensor.id));
-  if (!sensor.roomId) return { roomId: null };
-
-  const latest: LatestReading = {
-    roomId: sensor.roomId,
-    temperatureC: input.temperature,
-    humidityPct: input.humidity,
-    pressureHpa: input.pressure ?? null,
-    recordedAt: recordedAt.toISOString(),
   };
-  await cached(
-    () => redis().multi().set(rkey.latest(sensor.roomId!), JSON.stringify(latest), "EX", LATEST_TTL_SEC).del(rkey.status(sensor.roomId!)).exec(),
-    null,
-  );
-  await publish({ type: "reading", ...latest });
-  await checkReadingAlerts(sensor.roomId, input.temperature, input.humidity);
-  return { roomId: sensor.roomId };
+  await db()
+    .insert(sensorReadings)
+    .values(roomIds.length ? roomIds.map((roomId) => ({ ...base, roomId })) : [{ ...base, roomId: null }]);
+  await db().update(sensors).set({ lastSeenAt: recordedAt }).where(eq(sensors.id, sensor.id));
+
+  for (const roomId of roomIds) {
+    const latest: LatestReading = {
+      roomId,
+      temperatureC: input.temperature,
+      humidityPct: input.humidity,
+      pressureHpa: input.pressure ?? null,
+      recordedAt: recordedAt.toISOString(),
+    };
+    await cached(
+      () => redis().multi().set(rkey.latest(roomId), JSON.stringify(latest), "EX", LATEST_TTL_SEC).del(rkey.status(roomId)).exec(),
+      null,
+    );
+    await publish({ type: "reading", ...latest });
+    await checkReadingAlerts(roomId, input.temperature, input.humidity);
+  }
+  await escalateStaleAlerts();
+  return { roomIds };
 }
 
 export async function latestReading(roomId: string): Promise<LatestReading | null> {

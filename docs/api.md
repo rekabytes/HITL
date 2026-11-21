@@ -12,7 +12,7 @@ Header `X-Device-Key: <key>` (or `Authorization: Bearer <key>`).
 { "temperature": 27.4, "humidity": 66.1, "pressure": 1008.2 }
 ```
 
-`pressure` is optional. Returns `{"status": "stored", "roomId": "...", "assigned": true}`. Limited to 120 readings a minute per sensor.
+`pressure` is optional. Returns `{"status": "stored", "roomIds": ["..."], "assigned": true}`; a sensor covering several rooms stores the reading once per room. Limited to 120 readings a minute per sensor.
 
 ## Mobile app
 

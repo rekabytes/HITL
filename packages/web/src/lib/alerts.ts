@@ -1,9 +1,9 @@
-import { and, eq, gt, isNotNull, lt, sql } from "drizzle-orm";
-import { alerts, feedback, pics, rooms, sensors } from "@hitl/db";
+import { and, eq, gt, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { alerts, feedback, pics, rooms, sensorRooms, sensors } from "@hitl/db";
 import type { AlertKind, AlertSeverity } from "@hitl/shared";
 import { db } from "./db";
 import { env } from "./env";
-import { sendMail } from "./mail";
+import { sendMail, type MailResult } from "./mail";
 import { publish } from "./redis";
 
 /** After an automatic alert is resolved, wait this long before raising the same one again. */
@@ -32,22 +32,76 @@ export async function raiseAutoAlert(roomId: string, kind: Exclude<AlertKind, "m
   if (!created) return;
 
   await publish({ type: "alert", roomId, kind, severity, message });
-  void notifyPic(roomId, message);
+  void notifyAlert(created.id).catch((err) => console.warn("[alerts] notify failed:", err));
 }
 
-async function notifyPic(roomId: string, message: string) {
+/**
+ * Emails the alert to its room's person in charge and records the attempt.
+ * Used for new alerts, the Re-notify button and escalation.
+ */
+export async function notifyAlert(alertId: string, opts: { escalation?: boolean } = {}): Promise<MailResult> {
   const [row] = await db()
-    .select({ email: pics.email, room: rooms.name, code: rooms.code })
-    .from(pics)
-    .innerJoin(rooms, eq(rooms.id, pics.roomId))
-    .where(eq(pics.roomId, roomId))
+    .select({
+      message: alerts.message,
+      severity: alerts.severity,
+      createdAt: alerts.createdAt,
+      code: rooms.code,
+      roomName: rooms.name,
+      email: pics.email,
+      picName: pics.name,
+    })
+    .from(alerts)
+    .leftJoin(rooms, eq(rooms.id, alerts.roomId))
+    .leftJoin(pics, eq(pics.roomId, alerts.roomId))
+    .where(eq(alerts.id, alertId))
     .limit(1);
-  if (!row?.email) return;
-  await sendMail(
+  if (!row) return { sent: false, reason: "Alert not found." };
+  if (!row.email) return { sent: false, reason: `No person in charge with an email for ${row.code ?? "this room"}.` };
+
+  const prefix = opts.escalation ? "ESCALATION" : "Alert";
+  const result = await sendMail(
     row.email,
-    `[HITL] Alert in ${row.code}`,
-    `${message}\n\nRoom: ${row.room} (${row.code})\nOpen the alerts page: ${env.appUrl}/fm/alerts\n`,
+    `[HITL] ${prefix} in ${row.code}: ${row.severity}`,
+    [
+      `Hello ${row.picName},`,
+      "",
+      opts.escalation
+        ? `This alert has been open for over ${env.escalateAfterMin} minutes without anyone acknowledging it.`
+        : "A new alert was opened in a room you are in charge of.",
+      "",
+      `Room: ${row.roomName} (${row.code})`,
+      `Severity: ${row.severity}`,
+      `Message: ${row.message}`,
+      "",
+      `Open the alerts page: ${env.appUrl}/fm/alerts`,
+    ].join("\n"),
   );
+  if (result.sent) {
+    await db()
+      .update(alerts)
+      .set({ notifyCount: sql`${alerts.notifyCount} + 1`, lastNotifiedAt: new Date() })
+      .where(eq(alerts.id, alertId));
+  }
+  return result;
+}
+
+/**
+ * Escalates alerts nobody acknowledged in time: raises them to critical and
+ * emails the person in charge again. The update claims each alert once, so
+ * two callers at the same moment never send the same escalation twice.
+ * Runs on sensor ingest and when the alerts or dashboard pages load.
+ */
+export async function escalateStaleAlerts() {
+  const cutoff = new Date(Date.now() - env.escalateAfterMin * 60_000);
+  const claimed = await db()
+    .update(alerts)
+    .set({ escalatedAt: new Date(), severity: "critical" })
+    .where(and(eq(alerts.status, "open"), isNull(alerts.escalatedAt), lt(alerts.createdAt, cutoff)))
+    .returning({ id: alerts.id });
+  // No live event here: the alert is already counted on the dashboard.
+  for (const a of claimed) {
+    void notifyAlert(a.id, { escalation: true }).catch((err) => console.warn("[alerts] escalation mail failed:", err));
+  }
 }
 
 export async function checkReadingAlerts(roomId: string, temperatureC: number, humidityPct: number) {
@@ -85,15 +139,16 @@ export async function checkFeedbackAlerts(roomId: string) {
   }
 }
 
-/** Raises an alert for each assigned, active sensor that has gone quiet. Cheap enough to run on page load. */
+/** Raises an alert in each room covered by an active sensor that has gone quiet. Cheap enough to run on page load. */
 export async function checkOfflineSensors() {
   const cutoff = new Date(Date.now() - OFFLINE_AFTER_MIN * 60_000);
   const quiet = await db()
-    .select({ roomId: sensors.roomId, deviceId: sensors.deviceId, lastSeenAt: sensors.lastSeenAt })
+    .select({ roomId: sensorRooms.roomId, deviceId: sensors.deviceId })
     .from(sensors)
-    .where(and(eq(sensors.active, true), isNotNull(sensors.roomId), isNotNull(sensors.lastSeenAt), lt(sensors.lastSeenAt, cutoff)));
+    .innerJoin(sensorRooms, eq(sensorRooms.sensorId, sensors.id))
+    .where(and(eq(sensors.active, true), isNotNull(sensors.lastSeenAt), lt(sensors.lastSeenAt, cutoff)));
   for (const s of quiet) {
-    await raiseAutoAlert(s.roomId!, "sensor_offline", "warning",
+    await raiseAutoAlert(s.roomId, "sensor_offline", "warning",
       `Sensor ${s.deviceId} has sent nothing for over ${OFFLINE_AFTER_MIN} minutes.`);
   }
 }

@@ -47,6 +47,10 @@ export const env = {
       humidityMaxPct: number("COMFORT_HUMIDITY_MAX_PCT", 70),
     };
   },
+  /** Open, unacknowledged alerts older than this are escalated to critical and emailed again. */
+  get escalateAfterMin() {
+    return Math.max(1, number("ALERT_ESCALATE_AFTER_MIN", 5));
+  },
   get smtp() {
     const host = process.env.SMTP_HOST?.trim();
     if (!host) return null;

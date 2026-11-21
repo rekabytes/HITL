@@ -7,7 +7,9 @@ import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { listRooms } from "@/lib/readings";
 import { formatDateTime } from "@/lib/time";
-import { acknowledgeAlertAction, createAlertAction, resolveAlertAction } from "../actions";
+import { checkOfflineSensors, escalateStaleAlerts } from "@/lib/alerts";
+import { env } from "@/lib/env";
+import { acknowledgeAlertAction, createAlertAction, renotifyAlertAction, resolveAlertAction } from "../actions";
 
 export const metadata: Metadata = { title: "Alerts" };
 
@@ -22,6 +24,8 @@ const KIND = {
 
 export default async function AlertsPage() {
   await requireStaff();
+  await checkOfflineSensors();
+  await escalateStaleAlerts();
   const base = () =>
     db()
       .select({ alert: alerts, code: rooms.code, roomName: rooms.name, resolver: users.name })
@@ -36,7 +40,10 @@ export default async function AlertsPage() {
 
   return (
     <>
-      <PageHeader title="Alerts" sub="Raised automatically from readings, votes and quiet sensors, or reported by staff." />
+      <PageHeader
+        title="Alerts"
+        sub={`Raised automatically from readings, votes and quiet sensors, or reported by staff. The room's person in charge is emailed when an alert opens, and again as an escalation if nobody acknowledges it within ${env.escalateAfterMin} minutes.`}
+      />
       <section className="panel">
         <h2>Open ({open.length})</h2>
         {open.length === 0 ? (
@@ -51,6 +58,7 @@ export default async function AlertsPage() {
                   <th>Type</th>
                   <th>Message</th>
                   <th>Status</th>
+                  <th>Email</th>
                   <th>Resolve</th>
                 </tr>
               </thead>
@@ -64,6 +72,7 @@ export default async function AlertsPage() {
                     </td>
                     <td>
                       <span className={SEVERITY[a.severity]}>{a.severity}</span>
+                      {a.escalatedAt && <span className="badge badge-danger" style={{ marginLeft: 4 }}>escalated</span>}
                       <div className="small muted">{KIND[a.kind]}</div>
                     </td>
                     <td>{a.message}</td>
@@ -75,6 +84,14 @@ export default async function AlertsPage() {
                       ) : (
                         <span className="badge">seen {a.acknowledgedAt ? formatDateTime(a.acknowledgedAt) : ""}</span>
                       )}
+                    </td>
+                    <td>
+                      <div className="small muted">
+                        {a.notifyCount > 0 ? `Sent ${a.notifyCount}×, last ${formatDateTime(a.lastNotifiedAt)}` : "Not sent"}
+                      </div>
+                      <ActionForm action={renotifyAlertAction} submitLabel="Re-notify" variant="ghost" className="form-inline">
+                        <input type="hidden" name="id" value={a.id} />
+                      </ActionForm>
                     </td>
                     <td>
                       <ActionForm action={resolveAlertAction} submitLabel="Resolve" className="form-inline">

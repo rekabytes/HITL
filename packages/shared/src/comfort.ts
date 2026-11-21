@@ -15,6 +15,39 @@ export const DEFAULT_BANDS: ComfortBands = {
   humidityMaxPct: 70,
 };
 
+/**
+ * Rough share of extra cooling per degree a room is kept colder than needed.
+ * Common facility rule of thumb is 6 to 10% per °C of setpoint; 7% is used here.
+ */
+export const COOLING_PCT_PER_DEGREE = 7;
+
+export interface EnergyEstimate {
+  /** "overcooling": colder than the comfort band. "ok": inside or above it. */
+  status: "ok" | "overcooling";
+  /** Degrees below the bottom of the comfort band, 0 when not overcooling. */
+  degreesBelow: number;
+  /** Estimated extra cooling energy versus running at the bottom of the band. */
+  extraCoolingPct: number;
+  /** 1 when no cooling is wasted, falling toward 0 as overcooling grows. */
+  score: number;
+}
+
+/**
+ * Estimates wasted cooling from overcooling. It is an estimate from the room
+ * temperature alone, not a meter reading: it says nothing about rooms that run
+ * too warm, which cost comfort rather than energy.
+ */
+export function energyEstimate(temperatureC: number, bands: ComfortBands): EnergyEstimate {
+  const degreesBelow = Math.max(0, bands.tempMinC - temperatureC);
+  const extraCoolingPct = Math.round(degreesBelow * COOLING_PCT_PER_DEGREE);
+  return {
+    status: degreesBelow > 0 ? "overcooling" : "ok",
+    degreesBelow: Math.round(degreesBelow * 10) / 10,
+    extraCoolingPct,
+    score: Math.max(0, Math.round((1 - extraCoolingPct / 100) * 100) / 100),
+  };
+}
+
 export interface FeedbackTally {
   tooCold: number;
   perfect: number;
@@ -59,7 +92,10 @@ export function recommend({ temperatureC, humidityPct, bands, recent }: Recommen
     items.push(`Temperature ${temperatureC.toFixed(1)} °C is above ${bands.tempMaxC} °C. Check the air conditioning.`);
     bump("advice");
   } else if (temperatureC < bands.tempMinC) {
-    items.push(`Temperature ${temperatureC.toFixed(1)} °C is below ${bands.tempMinC} °C. Raise the setpoint to save energy.`);
+    const e = energyEstimate(temperatureC, bands);
+    items.push(
+      `Temperature ${temperatureC.toFixed(1)} °C is below ${bands.tempMinC} °C. Raising the setpoint by ${e.degreesBelow} °C would save about ${e.extraCoolingPct}% of cooling energy.`,
+    );
     bump("advice");
   }
 

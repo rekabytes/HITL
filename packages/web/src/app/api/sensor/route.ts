@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * ESP32 endpoint. Send the device key from /admin/rooms in `X-Device-Key`
  * (or `Authorization: Bearer <key>`) and a JSON body:
  *   {"temperature": 27.4, "humidity": 66.1, "pressure": 1008.2}
- * The key decides which room the reading belongs to.
+ * The key decides which rooms the reading belongs to.
  */
 export async function POST(req: Request) {
   const auth = req.headers.get("authorization");
@@ -24,6 +24,6 @@ export async function POST(req: Request) {
   const body = await readJson(req, sensorReadingInput);
   if (!body.ok) return body.response;
 
-  const { roomId } = await ingestReading(sensor, body.data);
-  return json({ status: "stored", roomId, assigned: roomId !== null });
+  const { roomIds } = await ingestReading(sensor, body.data);
+  return json({ status: "stored", roomIds, assigned: roomIds.length > 0 });
 }

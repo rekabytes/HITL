@@ -1,6 +1,6 @@
 # Sensors (ESP32 + BME280)
 
-1. In the portal go to **Rooms and sensors**, register the device under its room and copy the key. It is shown once; **New key** makes another and turns the old one off.
+1. In the portal go to **Rooms and sensors**, register the device with its firmware version, pick the room it sits in (or several rooms for a sensor in a shared space) and copy the key. It is shown once; **New key** makes another and turns the old one off.
 2. Put the portal URL and the key in the firmware.
 3. Post a reading every 30 to 60 seconds.
 
@@ -46,4 +46,6 @@ With HTTPS, either pin the server certificate with `WiFiClientSecure::setCACert`
 
 ## Status
 
-A sensor counts as online when it sent a reading in the last 10 minutes. After 30 minutes of silence an assigned sensor opens a "sensor offline" alert.
+A sensor counts as online when it sent a reading in the last 10 minutes. After 30 minutes of silence an assigned sensor opens a "sensor offline" alert in each of its rooms.
+
+Deleting a sensor keeps its past readings. Deleting a room removes everything recorded for it, so the portal asks you to type the room code first.

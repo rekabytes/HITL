@@ -7,6 +7,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -77,15 +78,33 @@ export const rooms = pgTable(
 
 export const sensors = pgTable("sensors", {
   id: uuid("id").primaryKey().defaultRandom(),
-  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "set null" }),
   deviceId: text("device_id").notNull().unique(),
   /** HMAC of the device key. The plain key is shown once when it is created. */
   keyHash: text("key_hash").notNull().unique(),
   label: text("label"),
+  firmwareVersion: text("firmware_version"),
   active: boolean("active").notNull().default(true),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
+
+/**
+ * Which rooms a sensor reports for. Usually one; a sensor in a shared space
+ * (for example between two adjoining rooms) can cover several. Each reading
+ * is stored once per room so room queries stay simple.
+ */
+export const sensorRooms = pgTable(
+  "sensor_rooms",
+  {
+    sensorId: uuid("sensor_id")
+      .notNull()
+      .references(() => sensors.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.sensorId, t.roomId] }), index("sensor_rooms_room_idx").on(t.roomId)],
+);
 
 export const sensorReadings = pgTable(
   "sensor_readings",
@@ -151,6 +170,11 @@ export const alerts = pgTable(
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
     resolutionNote: text("resolution_note"),
+    /** Emails sent to the room's person in charge for this alert. */
+    notifyCount: integer("notify_count").notNull().default(0),
+    lastNotifiedAt: timestamp("last_notified_at", { withTimezone: true }),
+    /** Set when an alert stayed open (not acknowledged) too long and was escalated. */
+    escalatedAt: timestamp("escalated_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [

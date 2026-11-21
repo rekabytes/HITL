@@ -16,6 +16,7 @@
 | `COMFORT_TEMP_MIN_C`, `COMFORT_TEMP_MAX_C` | web | `23`, `26` | Comfort band for advice and alerts |
 | `COMFORT_HUMIDITY_MIN_PCT`, `COMFORT_HUMIDITY_MAX_PCT` | web | `40`, `70` | |
 | `TZ_DISPLAY` | web | `Asia/Kuala_Lumpur` | Display times and the model's hour feature |
+| `ALERT_ESCALATE_AFTER_MIN` | web | `5` | Open alerts nobody acknowledged by then become critical and are emailed again as an escalation |
 | `READINGS_RETENTION_DAYS` | db prune | `180` | |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | web | off | Alert emails to persons in charge. Leave `SMTP_HOST` empty to turn off |
 | `LEGACY_MONGODB_URI`, `LEGACY_MONGODB_DB` | import script | none | Only for the one-off import |

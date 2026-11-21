@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { desc, eq } from "drizzle-orm";
 import { actions, rooms, users } from "@hitl/db";
-import { THERMAL_VOTE_LABELS } from "@hitl/shared";
+import { energyEstimate, THERMAL_VOTE_LABELS } from "@hitl/shared";
 import { ActionForm } from "@/components/ActionForm";
 import { PageHeader } from "@/components/Shell";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { roomStatuses } from "@/lib/readings";
 import { formatDateTime, timeAgo } from "@/lib/time";
 import { logActionAction } from "../actions";
@@ -70,6 +71,7 @@ export default async function RecommendationsPage() {
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
+                <EnergyLine temperatureC={s.latest.temperatureC} />
                 <p className="small muted">
                   {s.prediction
                     ? `Model (${s.prediction.model === "random_forest" ? "trained" : "rule estimate"}): ${Math.round(
@@ -109,5 +111,22 @@ export default async function RecommendationsPage() {
         )}
       </section>
     </>
+  );
+}
+
+function EnergyLine({ temperatureC }: { temperatureC: number }) {
+  const e = energyEstimate(temperatureC, env.bands);
+  return (
+    <p className="small">
+      Energy:{" "}
+      {e.status === "ok" ? (
+        <span className="badge badge-ok">no overcooling</span>
+      ) : (
+        <>
+          <span className="badge badge-warn">overcooling</span> {e.degreesBelow} °C below the band, about {e.extraCoolingPct}% extra
+          cooling (score {e.score.toFixed(2)})
+        </>
+      )}
+    </p>
   );
 }

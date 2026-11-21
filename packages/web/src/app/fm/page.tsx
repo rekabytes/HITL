@@ -3,7 +3,7 @@ import { and, count, gt, ne } from "drizzle-orm";
 import { alerts, feedback } from "@hitl/db";
 import { LiveRooms, type LiveRoom } from "@/components/LiveRooms";
 import { PageHeader } from "@/components/Shell";
-import { checkOfflineSensors } from "@/lib/alerts";
+import { checkOfflineSensors, escalateStaleAlerts } from "@/lib/alerts";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { roomStatuses } from "@/lib/readings";
@@ -13,6 +13,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 export default async function FmDashboard() {
   await requireStaff();
   await checkOfflineSensors();
+  await escalateStaleAlerts();
   const day = new Date(Date.now() - 86_400_000);
   const [statuses, openByRoom, [votes24h], [uncomfortable24h]] = await Promise.all([
     roomStatuses(),

@@ -8,6 +8,7 @@ import { ALERT_SEVERITIES } from "@hitl/shared";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { optStr, str, type FormState } from "@/lib/form";
+import { notifyAlert } from "@/lib/alerts";
 import { publish } from "@/lib/redis";
 
 export async function logActionAction(_prev: FormState, form: FormData): Promise<FormState> {
@@ -37,10 +38,26 @@ export async function createAlertAction(_prev: FormState, form: FormData): Promi
     message: str(form, "message"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
-  await db().insert(alerts).values({ ...parsed.data, kind: "manual", createdBy: user.id });
+  const [created] = await db()
+    .insert(alerts)
+    .values({ ...parsed.data, kind: "manual", createdBy: user.id })
+    .returning({ id: alerts.id });
   await publish({ type: "alert", roomId: parsed.data.roomId, kind: "manual", severity: parsed.data.severity, message: parsed.data.message });
+  const mail = await notifyAlert(created!.id);
   revalidatePath("/fm/alerts");
-  return { ok: "Alert opened." };
+  return mail.sent
+    ? { ok: "Alert opened and the person in charge was emailed." }
+    : { ok: `Alert opened. No email sent: ${mail.reason}` };
+}
+
+/** Sends the alert to the room's person in charge again. */
+export async function renotifyAlertAction(_prev: FormState, form: FormData): Promise<FormState> {
+  await requireStaff();
+  const id = str(form, "id");
+  if (!id) return { error: "Bad request." };
+  const mail = await notifyAlert(id);
+  revalidatePath("/fm/alerts");
+  return mail.sent ? { ok: "Sent." } : { error: mail.reason };
 }
 
 export async function acknowledgeAlertAction(_prev: FormState, form: FormData): Promise<FormState> {
