@@ -12,6 +12,8 @@ export interface LiveRoom {
   temperatureC: number | null;
   humidityPct: number | null;
   recordedAt: string | null;
+  /** Sensors averaged into the current reading. */
+  sensorCount: number;
   level: "ok" | "advice" | "action" | "none";
   advice: string | null;
   votes: { tooCold: number; perfect: number; tooHot: number };
@@ -19,7 +21,7 @@ export interface LiveRoom {
 }
 
 type Event =
-  | { type: "reading"; roomId: string; temperatureC: number; humidityPct: number; recordedAt: string }
+  | { type: "reading"; roomId: string; temperatureC: number; humidityPct: number; recordedAt: string; sensorCount: number }
   | { type: "feedback"; roomId: string; vote: "too_cold" | "perfect" | "too_hot" }
   | { type: "alert"; roomId: string | null };
 
@@ -60,7 +62,7 @@ export function LiveRooms({ initial }: { initial: LiveRoom[] }) {
         prev.map((r) => {
           if (r.id !== roomId) return r;
           if (ev.type === "reading") {
-            return { ...r, temperatureC: ev.temperatureC, humidityPct: ev.humidityPct, recordedAt: ev.recordedAt };
+            return { ...r, temperatureC: ev.temperatureC, humidityPct: ev.humidityPct, recordedAt: ev.recordedAt, sensorCount: ev.sensorCount };
           }
           if (ev.type === "feedback") {
             const key = ev.vote === "too_cold" ? "tooCold" : ev.vote === "too_hot" ? "tooHot" : "perfect";
@@ -121,6 +123,12 @@ export function LiveRooms({ initial }: { initial: LiveRoom[] }) {
               <div className="where">
                 <Icon name="map-pin" size={12} />
                 {r.name} · {r.buildingName}
+                {!stale && r.sensorCount > 1 && (
+                  <span className="sensor-avg" title="Average of the latest reading from each sensor in this room">
+                    <Icon name="cpu" size={12} />
+                    avg of {r.sensorCount} sensors
+                  </span>
+                )}
               </div>
               <div className="metrics">
                 <div className="metric">

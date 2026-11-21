@@ -44,6 +44,10 @@ void loop() {
 
 With HTTPS, either pin the server certificate with `WiFiClientSecure::setCACert` or keep the portal on the campus network and use HTTP inside it.
 
+## Several sensors in one room
+
+A large room can have more than one sensor. The room's current temperature and humidity are the average of the latest reading from each sensor that reported in the last 15 minutes; a sensor that goes quiet drops out of the average until it reports again. The dashboard marks these rooms "avg of N sensors". Each sensor's own readings stay visible on the Sensors page and in the history.
+
 ## Status
 
 A sensor counts as online when it sent a reading in the last 10 minutes. After 30 minutes of silence an assigned sensor opens a "sensor offline" alert in each of its rooms.

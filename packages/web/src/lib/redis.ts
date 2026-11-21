@@ -53,6 +53,7 @@ export type LiveEvent =
       humidityPct: number;
       pressureHpa: number | null;
       recordedAt: string;
+      sensorCount: number;
     }
   | { type: "feedback"; roomId: string; vote: string; createdAt: string }
   | { type: "alert"; roomId: string | null; kind: string; severity: string; message: string };

@@ -13,17 +13,71 @@ export interface LatestReading {
   temperatureC: number;
   humidityPct: number;
   pressureHpa: number | null;
+  /** Time of the newest reading that went into the average. */
   recordedAt: string;
+  /** How many sensors were averaged. A large room can have several. */
+  sensorCount: number;
 }
 
 const LATEST_TTL_SEC = 15 * 60;
 const STATUS_TTL_SEC = 30;
 /** A reading older than this is too stale to pair with a vote or to advise on. */
 export const FRESH_MIN = 30;
+/** Sensors that reported within this window are averaged into the room's current reading. */
+export const AVERAGE_WINDOW_MIN = 15;
 
 export async function sensorRoomIds(sensorId: string): Promise<string[]> {
   const rows = await db().select({ roomId: sensorRooms.roomId }).from(sensorRooms).where(eq(sensorRooms.sensorId, sensorId));
   return rows.map((r) => r.roomId);
+}
+
+const round = (n: number, places: number) => Math.round(n * 10 ** places) / 10 ** places;
+
+/**
+ * The room's current conditions: the latest reading from each sensor that
+ * reported in the last AVERAGE_WINDOW_MIN minutes, averaged. With one sensor
+ * this is just its latest reading. When every sensor is quiet, the single
+ * newest reading is returned so pages can still show how stale it is.
+ */
+async function computeLatest(roomId: string): Promise<LatestReading | null> {
+  const cutoff = new Date(Date.now() - AVERAGE_WINDOW_MIN * 60_000);
+  const perSensor = await db()
+    .selectDistinctOn([sensorReadings.sensorId], {
+      temperatureC: sensorReadings.temperatureC,
+      humidityPct: sensorReadings.humidityPct,
+      pressureHpa: sensorReadings.pressureHpa,
+      recordedAt: sensorReadings.recordedAt,
+    })
+    .from(sensorReadings)
+    .where(and(eq(sensorReadings.roomId, roomId), gt(sensorReadings.recordedAt, cutoff)))
+    .orderBy(sensorReadings.sensorId, desc(sensorReadings.recordedAt));
+
+  let rows = perSensor;
+  if (rows.length === 0) {
+    rows = await db()
+      .select({
+        temperatureC: sensorReadings.temperatureC,
+        humidityPct: sensorReadings.humidityPct,
+        pressureHpa: sensorReadings.pressureHpa,
+        recordedAt: sensorReadings.recordedAt,
+      })
+      .from(sensorReadings)
+      .where(eq(sensorReadings.roomId, roomId))
+      .orderBy(desc(sensorReadings.recordedAt))
+      .limit(1);
+    if (rows.length === 0) return null;
+  }
+
+  const avg = (pick: (r: (typeof rows)[number]) => number) => rows.reduce((sum, r) => sum + pick(r), 0) / rows.length;
+  const pressures = rows.map((r) => r.pressureHpa).filter((p): p is number => p !== null);
+  return {
+    roomId,
+    temperatureC: round(avg((r) => r.temperatureC), 2),
+    humidityPct: round(avg((r) => r.humidityPct), 1),
+    pressureHpa: pressures.length ? round(pressures.reduce((a, b) => a + b, 0) / pressures.length, 1) : null,
+    recordedAt: new Date(Math.max(...rows.map((r) => r.recordedAt.getTime()))).toISOString(),
+    sensorCount: rows.length,
+  };
 }
 
 /** Stores one reading row per room the sensor covers (or one unassigned row), then updates caches and alerts. */
@@ -43,19 +97,15 @@ export async function ingestReading(sensor: Sensor, input: SensorReadingInput) {
   await db().update(sensors).set({ lastSeenAt: recordedAt }).where(eq(sensors.id, sensor.id));
 
   for (const roomId of roomIds) {
-    const latest: LatestReading = {
-      roomId,
-      temperatureC: input.temperature,
-      humidityPct: input.humidity,
-      pressureHpa: input.pressure ?? null,
-      recordedAt: recordedAt.toISOString(),
-    };
+    // Recompute the room average with this reading in it; alerts and the live feed use the average.
+    const latest = await computeLatest(roomId);
+    if (!latest) continue;
     await cached(
       () => redis().multi().set(rkey.latest(roomId), JSON.stringify(latest), "EX", LATEST_TTL_SEC).del(rkey.status(roomId)).exec(),
       null,
     );
     await publish({ type: "reading", ...latest });
-    await checkReadingAlerts(roomId, input.temperature, input.humidity);
+    await checkReadingAlerts(roomId, latest.temperatureC, latest.humidityPct);
   }
   await escalateStaleAlerts();
   return { roomIds };
@@ -63,22 +113,13 @@ export async function ingestReading(sensor: Sensor, input: SensorReadingInput) {
 
 export async function latestReading(roomId: string): Promise<LatestReading | null> {
   const hit = await cached(() => redis().get(rkey.latest(roomId)), null);
-  if (hit) return JSON.parse(hit) as LatestReading;
-  const [row] = await db()
-    .select()
-    .from(sensorReadings)
-    .where(eq(sensorReadings.roomId, roomId))
-    .orderBy(desc(sensorReadings.recordedAt))
-    .limit(1);
-  if (!row) return null;
-  const latest: LatestReading = {
-    roomId,
-    temperatureC: row.temperatureC,
-    humidityPct: row.humidityPct,
-    pressureHpa: row.pressureHpa,
-    recordedAt: row.recordedAt.toISOString(),
-  };
-  await cached(() => redis().set(rkey.latest(roomId), JSON.stringify(latest), "EX", LATEST_TTL_SEC), null);
+  if (hit) {
+    const parsed = JSON.parse(hit) as LatestReading;
+    // Entries cached before averaging existed have no sensorCount; recompute those.
+    if (typeof parsed.sensorCount === "number") return parsed;
+  }
+  const latest = await computeLatest(roomId);
+  if (latest) await cached(() => redis().set(rkey.latest(roomId), JSON.stringify(latest), "EX", LATEST_TTL_SEC), null);
   return latest;
 }
 

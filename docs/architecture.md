@@ -18,7 +18,7 @@
 
 ## Request flows
 
-**Sensor reading.** The ESP32 posts JSON with its device key. `web` looks up the key's HMAC in `sensors`, so the reading lands in the rooms that sensor covers. It writes one row per room to `sensor_readings`, stores the latest reading in Redis, publishes it on the `hitl:live` channel and checks the comfort band for alerts.
+**Sensor reading.** The ESP32 posts JSON with its device key. `web` looks up the key's HMAC in `sensors`, so the reading lands in the rooms that sensor covers. It writes one row per room to `sensor_readings`, then works out the room's current conditions: the latest reading from each sensor that reported in the last 15 minutes, averaged. A large room with two sensors therefore shows one value for the whole room. That average goes into Redis, out on the `hitl:live` channel, into the comfort-band alert check, and onto any vote cast in the room.
 
 **Occupant vote.** The mobile app scans the room's QR code (it holds the room code) and posts the vote with a bearer token. `web` attaches the room's current temperature and humidity to the vote if the last reading is under 30 minutes old. That pairing is the training data. It then checks whether most recent votes say too hot or too cold, which opens an alert, and starts a retrain once 50 new labelled votes have come in.
 
@@ -34,7 +34,7 @@ Redis is a cache, never the source of truth. If it goes down, ingest, votes and 
 
 | Key | Use | TTL |
 |---|---|---|
-| `hitl:room:<id>:latest` | Latest reading per room | 15 min |
+| `hitl:room:<id>:latest` | Current room conditions (average of each sensor's latest reading) | 15 min |
 | `hitl:room:<id>:status` | Model prediction per room | 30 s |
 | `hitl:session:<hash>` | Session lookup | 60 s |
 | `hitl:rate:<bucket>` | Login, sign-up, sensor and vote rate limits | window |

@@ -94,7 +94,10 @@ export default async function RecommendationsPage() {
                     <VoteBadge vote="too_cold" count={s.tally.tooCold} />
                     <VoteBadge vote="perfect" count={s.tally.perfect} />
                     <VoteBadge vote="too_hot" count={s.tally.tooHot} />
-                    <span className="tiny faint" style={{ alignSelf: "center" }}>last 30 min · read {timeAgo(s.latest.recordedAt)}</span>
+                    <span className="tiny faint" style={{ alignSelf: "center" }}>
+                      last 30 min · read {timeAgo(s.latest.recordedAt)}
+                      {s.latest.sensorCount > 1 && ` · avg of ${s.latest.sensorCount} sensors`}
+                    </span>
                   </div>
                   <ul className="list">
                     {s.recommendation!.items.map((item) => (

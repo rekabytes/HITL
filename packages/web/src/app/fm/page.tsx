@@ -33,6 +33,7 @@ export default async function FmDashboard() {
     temperatureC: s.latest?.temperatureC ?? null,
     humidityPct: s.latest?.humidityPct ?? null,
     recordedAt: s.latest?.recordedAt ?? null,
+    sensorCount: s.latest?.sensorCount ?? 0,
     level: s.recommendation?.level ?? "none",
     advice: s.recommendation && s.recommendation.level !== "ok" ? (s.recommendation.items[0] ?? null) : null,
     votes: s.tally,

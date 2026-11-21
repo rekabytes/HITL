@@ -377,3 +377,4 @@ details.danger-zone .dz-body { margin-top: 0.5rem; display: grid; gap: 0.5rem; m
   .ai-card-actions { grid-column: 2; }
 }
 .panel-head h2 .ai-mark .icon { color: #fff; }
+.sensor-avg { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: auto; padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--brand-50); color: var(--brand-700); font-size: 0.72rem; font-weight: 600; }

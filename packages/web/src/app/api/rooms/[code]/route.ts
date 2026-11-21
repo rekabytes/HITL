@@ -22,7 +22,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ code: string }>
     building: building?.name ?? null,
     floor: room.floor,
     conditions: isFresh(latest)
-      ? { temperatureC: latest.temperatureC, humidityPct: latest.humidityPct, recordedAt: latest.recordedAt }
+      ? { temperatureC: latest.temperatureC, humidityPct: latest.humidityPct, recordedAt: latest.recordedAt, sensorCount: latest.sensorCount }
       : null,
   });
 }
