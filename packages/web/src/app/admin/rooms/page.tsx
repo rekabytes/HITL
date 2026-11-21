@@ -57,7 +57,7 @@ export default async function RoomsPage() {
             <div className="form-row">
               <label>
                 Name
-                <input name="name" required placeholder="Block K" />
+                <input name="name" required placeholder="URSB Building" />
               </label>
               <label>
                 Address
@@ -108,11 +108,11 @@ export default async function RoomsPage() {
                 </label>
                 <label>
                   Code (in the QR)
-                  <input name="code" required placeholder="BK-01" pattern="[A-Za-z0-9_\-]+" />
+                  <input name="code" required placeholder="L21" pattern="[A-Za-z0-9_\-]+" />
                 </label>
                 <label>
                   Name
-                  <input name="name" required placeholder="Lecture room 1" />
+                  <input name="name" required placeholder="Level 21" />
                 </label>
                 <label>
                   Floor
@@ -195,7 +195,7 @@ export default async function RoomsPage() {
           <div className="form-row">
             <label>
               Device id
-              <input name="deviceId" required placeholder="esp32-bk01-a" />
+              <input name="deviceId" required placeholder="esp32-l21-a" />
             </label>
             <label>
               Firmware version

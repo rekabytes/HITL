@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   return json({ status: "stored", id: result.feedback.id, room: result.room.code }, 201);
 }
 
-/** Staff only. Query: ?room=BK-01&vote=too_hot&limit=100&offset=0 */
+/** Staff only. Query: ?room=L21&vote=too_hot&limit=100&offset=0 */
 export async function GET(req: Request) {
   const user = await apiUser(req);
   if (!isStaff(user)) return problem(403, "Staff only");

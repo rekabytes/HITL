@@ -68,7 +68,7 @@ export const rooms = pgTable(
       .notNull()
       .references(() => buildings.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
-    /** Value printed in the room's QR code, for example "BK-01". */
+    /** Value printed in the room's QR code, for example "L21". */
     code: text("code").notNull().unique(),
     floor: text("floor"),
     createdAt: createdAt(),
@@ -211,6 +211,32 @@ export const modelRuns = pgTable("model_runs", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
+/**
+ * AI-written notes about a room: a summary of how it has been, and suggestions
+ * staff can accept or dismiss. `source` says where the text came from, so demo
+ * text is never mistaken for real analysis.
+ */
+export const aiInsights = pgTable(
+  "ai_insights",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["summary", "suggestion"] }).notNull(),
+    priority: text("priority", { enum: ["low", "medium", "high"] }).notNull().default("low"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    /** Suggestions move from open to accepted or dismissed; summaries stay open. */
+    status: text("status", { enum: ["open", "accepted", "dismissed"] }).notNull().default("open"),
+    source: text("source", { enum: ["demo", "model", "llm"] }).notNull(),
+    decidedBy: uuid("decided_by").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_insights_room_idx").on(t.roomId, t.createdAt.desc())],
+);
+
 export type User = typeof users.$inferSelect;
 export type Room = typeof rooms.$inferSelect;
 export type Building = typeof buildings.$inferSelect;
@@ -220,3 +246,4 @@ export type Feedback = typeof feedback.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
 export type Pic = typeof pics.$inferSelect;
 export type ModelRun = typeof modelRuns.$inferSelect;
+export type AiInsight = typeof aiInsights.$inferSelect;

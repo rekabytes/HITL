@@ -47,7 +47,7 @@ After changing `packages/db/src/schema.ts`, run `pnpm db:generate` and commit th
 
 ## First steps after sign-in
 
-1. **Rooms and sensors:** add a building, then rooms. Each room has a code such as `BK-01`; print its QR code for the door.
+1. **Rooms and sensors:** add a building, then rooms. Each room has a code such as `L21`; print its QR code for the door.
 2. Register each ESP32 under its room and copy the device key into the firmware (see [docs/sensors.md](docs/sensors.md)).
 3. **Users:** create facility manager accounts.
 4. **Persons in charge:** one contact per room, emailed when an alert opens there.

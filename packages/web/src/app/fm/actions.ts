@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { actions, alerts } from "@hitl/db";
+import { actions, aiInsights, alerts } from "@hitl/db";
 import { ALERT_SEVERITIES } from "@hitl/shared";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -86,4 +86,27 @@ export async function resolveAlertAction(_prev: FormState, form: FormData): Prom
   if (alert) await db().insert(actions).values({ roomId: alert.roomId, alertId: id, userId: user.id, note });
   revalidatePath("/fm/alerts");
   return { ok: "Resolved." };
+}
+
+/**
+ * Accepts or dismisses an AI suggestion. Accepting also writes it to the
+ * actions log, so the history shows what staff chose to do.
+ */
+export async function decideSuggestionAction(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await requireStaff();
+  const id = str(form, "id");
+  const decision = str(form, "decision");
+  if (!id || (decision !== "accepted" && decision !== "dismissed")) return { error: "Bad request." };
+  const [row] = await db()
+    .update(aiInsights)
+    .set({ status: decision, decidedBy: user.id, decidedAt: new Date() })
+    .where(and(eq(aiInsights.id, id), eq(aiInsights.kind, "suggestion"), eq(aiInsights.status, "open")))
+    .returning({ roomId: aiInsights.roomId, title: aiInsights.title });
+  if (!row) return { error: "Someone already decided this one." };
+  if (decision === "accepted") {
+    await db().insert(actions).values({ roomId: row.roomId, userId: user.id, note: `Accepted AI suggestion: ${row.title}` });
+  }
+  revalidatePath("/fm/recommendations");
+  revalidatePath("/fm");
+  return { ok: decision === "accepted" ? "Accepted and logged." : "Dismissed." };
 }

@@ -22,7 +22,7 @@ export type AlertSeverity = (typeof ALERT_SEVERITIES)[number];
 export const ALERT_STATUSES = ["open", "acknowledged", "resolved"] as const;
 export type AlertStatus = (typeof ALERT_STATUSES)[number];
 
-/** Room codes are what the QR codes on the door hold, e.g. "BK-01". */
+/** Room codes are what the QR codes on the door hold, e.g. "L21". */
 export const roomCodeSchema = z
   .string()
   .trim()

@@ -3,11 +3,13 @@ import { desc, eq } from "drizzle-orm";
 import { actions, rooms, users } from "@hitl/db";
 import { energyEstimate, THERMAL_VOTE_LABELS } from "@hitl/shared";
 import { ActionForm } from "@/components/ActionForm";
+import { AiInsightsPanel } from "@/components/AiInsights";
 import { Icon, type IconName } from "@/components/Icon";
 import { Badge, Empty, PageHeader, PanelHead } from "@/components/ui";
 import { VoteBadge } from "@/components/VoteBadge";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { listInsights } from "@/lib/insights";
 import { env } from "@/lib/env";
 import { roomStatuses } from "@/lib/readings";
 import { formatDateTime, timeAgo } from "@/lib/time";
@@ -23,8 +25,9 @@ const LEVEL = {
 
 export default async function RecommendationsPage() {
   await requireStaff();
-  const [statuses, recent] = await Promise.all([
+  const [statuses, insights, recent] = await Promise.all([
     roomStatuses({ withPrediction: true }),
+    listInsights(),
     db()
       .select({ id: actions.id, note: actions.note, createdAt: actions.createdAt, code: rooms.code, by: users.name })
       .from(actions)
@@ -46,6 +49,10 @@ export default async function RecommendationsPage() {
         title="Recommendations"
         sub="Advice combines the comfort band with recent votes. The model score is the predicted chance that an occupant votes perfect."
       />
+      {insights.map((i) => (
+        <AiInsightsPanel key={i.roomId} data={i} />
+      ))}
+      {insights.length > 0 && <div className="mt" />}
       {statuses.length === 0 && (
         <section className="panel">
           <Empty icon="home">No rooms yet.</Empty>

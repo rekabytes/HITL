@@ -3,14 +3,17 @@
 //
 //   DEV_ADMIN_EMAIL=... DEV_ADMIN_PASSWORD=... pnpm db:seed-demo
 //
-// Creates: an admin and a facility manager (both use DEV_ADMIN_PASSWORD),
-// five occupants, two buildings, four rooms each with a sensor, 7 days of
-// 5-minute readings, occupant votes paired with conditions, PICs and alerts.
+// Matches the real deployment: URSB Building, one large room on level 21,
+// two ESP32 + BME280 sensors in it. Creates an admin and a facility manager
+// (both use DEV_ADMIN_PASSWORD), five occupants, 7 days of 5-minute readings
+// from each sensor, occupant votes paired with conditions, a PIC, alerts,
+// demo AI insights (summary and suggestions) and past model training runs.
+// Insight text is marked source "demo" so the portal labels it as demo data.
 import "./env";
 import { createHmac, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { sql as dsql } from "drizzle-orm";
-import { alerts, actions, buildings, createDb, feedback, pics, rooms, sensorReadings, sensorRooms, sensors, users } from "../src/index";
+import { actions, aiInsights, alerts, buildings, createDb, feedback, modelRuns, pics, rooms, sensorReadings, sensorRooms, sensors, users } from "../src/index";
 
 const url = process.env.DATABASE_URL;
 const secret = process.env.AUTH_SECRET;
@@ -34,51 +37,53 @@ const isWeekday = (d: Date) => {
   return day >= 1 && day <= 5;
 };
 
-interface RoomProfile {
-  code: string;
-  name: string;
-  floor: string;
-  building: string;
-  /** Temperature while the AC runs (8:00 to 18:00 on weekdays). */
-  occupiedC: number;
-  /** Extra heat in the afternoon (people, computers, sun). */
-  afternoonC: number;
-  humidity: number;
-}
+const BUILDING = "URSB Building";
+const ROOM = { code: "L21", name: "Level 21", floor: "21" };
 
-const PROFILES: RoomProfile[] = [
-  { code: "BK-01", name: "Lecture Room 1", floor: "1", building: "Block K", occupiedC: 21.6, afternoonC: 0.4, humidity: 55 },
-  { code: "BK-02", name: "Computer Lab", floor: "2", building: "Block K", occupiedC: 25.2, afternoonC: 2.6, humidity: 60 },
-  { code: "BK-03", name: "Meeting Room", floor: "2", building: "Block K", occupiedC: 24.2, afternoonC: 0.6, humidity: 58 },
-  { code: "BA-101", name: "Library Reading Area", floor: "1", building: "Block A", occupiedC: 24.6, afternoonC: 0.8, humidity: 74 },
-];
+/**
+ * The room is large, so the two sensors see slightly different conditions:
+ * sensor B sits on the side that warms up more in the afternoon.
+ */
+const SENSORS = [
+  { deviceId: "esp32-l21-a", label: "BME280, sensor A", offsetC: 0, afternoonC: 1.4, offsetRh: 0 },
+  { deviceId: "esp32-l21-b", label: "BME280, sensor B", offsetC: 0.4, afternoonC: 2.6, offsetRh: -2 },
+] as const;
+const OCCUPIED_C = 23.4;
+const HUMIDITY = 60;
 
-function conditions(p: RoomProfile, t: Date) {
+function conditions(s: (typeof SENSORS)[number], t: Date) {
   const h = myHour(t) + t.getUTCMinutes() / 60;
   const occupied = isWeekday(t) && h >= 8 && h < 18;
   let temp: number;
   if (occupied) {
-    const afternoon = Math.max(0, Math.sin(((h - 11) / 7) * Math.PI)) * p.afternoonC;
-    temp = p.occupiedC + afternoon;
+    const afternoon = Math.max(0, Math.sin(((h - 11) / 7) * Math.PI)) * s.afternoonC;
+    temp = OCCUPIED_C + s.offsetC + afternoon;
   } else {
-    temp = 28.5 + Math.sin(((h - 9) / 24) * 2 * Math.PI) * 1.2; // AC off, tropical night/day drift
+    temp = 28.5 + Math.sin(((h - 9) / 24) * 2 * Math.PI) * 1.2; // AC off, tropical day and night drift
   }
-  const hum = occupied ? p.humidity : p.humidity + 12;
+  const hum = (occupied ? HUMIDITY : HUMIDITY + 12) + s.offsetRh;
   return { temp: temp + noise(0.25), hum: Math.min(95, hum + noise(2.5)), occupied };
+}
+
+/** What an occupant feels: the average of both sides of the room. */
+function roomConditions(t: Date) {
+  const a = conditions(SENSORS[0], t);
+  const b = conditions(SENSORS[1], t);
+  return { temp: (a.temp + b.temp) / 2, hum: (a.hum + b.hum) / 2, occupied: a.occupied };
 }
 
 /** How a typical occupant here votes at a given temperature. */
 function vote(temp: number, hum: number): "too_cold" | "perfect" | "too_hot" {
-  const feelsLike = temp + Math.max(0, hum - 70) * 0.06 + noise(0.9);
+  const feelsLike = temp + Math.max(0, hum - 70) * 0.06 + noise(0.5);
   if (feelsLike < 23.2) return "too_cold";
   if (feelsLike > 25.8) return "too_hot";
   return "perfect";
 }
 
 const COMMENTS: Record<string, string[]> = {
-  too_cold: ["Freezing, had to wear a jacket", "AC is way too strong", "Too cold to focus", ""],
+  too_cold: ["Freezing near the vents", "AC is way too strong this morning", "Too cold to focus", ""],
   perfect: ["Comfortable", "Nice today", "", "", "Good"],
-  too_hot: ["Very stuffy after lunch", "Too warm, sweating", "Computers make it hot in here", "Air feels sticky", ""],
+  too_hot: ["Very stuffy after lunch", "Too warm, sweating", "Afternoon sun makes it hot on this side", "Air feels sticky", ""],
 };
 
 async function main() {
@@ -106,80 +111,79 @@ async function main() {
     )
     .returning();
 
-  const buildingIds = new Map<string, string>();
-  for (const [name, address] of [["Block K", "UniKL MIIT, Kuala Lumpur"], ["Block A", "UniKL MIIT, Kuala Lumpur"]] as const) {
-    const [b] = await db.insert(buildings).values({ name, address }).returning();
-    buildingIds.set(name, b!.id);
-  }
+  const [building] = await db.insert(buildings).values({ name: BUILDING }).returning();
+  const [room] = await db.insert(rooms).values({ buildingId: building!.id, ...ROOM }).returning();
+  const roomId = room!.id;
 
-  const roomIds = new Map<string, string>();
-  const sensorIds = new Map<string, string>();
-  for (const p of PROFILES) {
-    const [r] = await db.insert(rooms).values({ buildingId: buildingIds.get(p.building)!, code: p.code, name: p.name, floor: p.floor }).returning();
-    roomIds.set(p.code, r!.id);
+  const sensorIds: string[] = [];
+  for (const s of SENSORS) {
     const key = `hitl_${randomBytes(24).toString("base64url")}`;
-    const [s] = await db
+    const [row] = await db
       .insert(sensors)
       .values({
-        deviceId: `esp32-${p.code.toLowerCase()}`,
-        label: "BME280",
+        deviceId: s.deviceId,
+        label: s.label,
         firmwareVersion: "v2.4.11",
         keyHash: createHmac("sha256", secret!).update(key).digest("hex"),
         lastSeenAt: new Date(),
       })
       .returning();
-    await db.insert(sensorRooms).values({ sensorId: s!.id, roomId: r!.id });
-    sensorIds.set(p.code, s!.id);
-    if (p.code === "BK-02") console.log(`Device key for esp32-bk-02 (to post live readings): ${key}`);
+    await db.insert(sensorRooms).values({ sensorId: row!.id, roomId });
+    sensorIds.push(row!.id);
+    console.log(`Device key for ${s.deviceId} (to post live readings): ${key}`);
   }
 
-  // --- readings: every 5 minutes for 7 days ---
+  // --- readings: every 5 minutes for 7 days, from each sensor ---
   const now = Date.now();
   const start = now - 7 * 86_400_000;
   const step = 5 * 60_000;
-  for (const p of PROFILES) {
-    const roomId = roomIds.get(p.code)!;
+  for (const [i, s] of SENSORS.entries()) {
     const rows = [];
-    for (let t = start; t <= now; t += step) {
+    // Sensor B reports a minute after A, as two independent devices would.
+    for (let t = start + i * 60_000; t <= now; t += step) {
       const d = new Date(t);
-      const c = conditions(p, d);
-      rows.push({ roomId, sensorId: sensorIds.get(p.code)!, temperatureC: +c.temp.toFixed(2), humidityPct: +c.hum.toFixed(1), pressureHpa: +(1008 + noise(2)).toFixed(1), recordedAt: d });
-    }
-    for (let i = 0; i < rows.length; i += 1000) await db.insert(sensorReadings).values(rows.slice(i, i + 1000));
-  }
-
-  // --- votes: occupied hours, a few per room per day ---
-  const votes = [];
-  for (const p of PROFILES) {
-    const roomId = roomIds.get(p.code)!;
-    for (let t = start; t <= now; t += 20 * 60_000) {
-      const d = new Date(t + noise(8 * 60_000));
-      const c = conditions(p, d);
-      if (!c.occupied || rand() > 0.42) continue;
-      const v = vote(c.temp, c.hum);
-      const picks = COMMENTS[v]!;
-      votes.push({
+      const c = conditions(s, d);
+      rows.push({
         roomId,
-        userId: occupants[Math.floor(rand() * occupants.length)]!.id,
-        vote: v,
-        comfortable: v === "perfect" || rand() < 0.15,
-        comment: picks[Math.floor(rand() * picks.length)]!,
+        sensorId: sensorIds[i]!,
         temperatureC: +c.temp.toFixed(2),
         humidityPct: +c.hum.toFixed(1),
-        source: "mobile" as const,
-        createdAt: d,
+        pressureHpa: +(1006 + noise(2)).toFixed(1),
+        recordedAt: d,
       });
     }
+    for (let j = 0; j < rows.length; j += 1000) await db.insert(sensorReadings).values(rows.slice(j, j + 1000));
   }
-  // A burst of "too hot" in the computer lab right now, so the dashboard shows a live problem.
+
+  // --- votes: occupied hours, a few an hour ---
+  const votes = [];
+  for (let t = start; t <= now; t += 12 * 60_000) {
+    const d = new Date(t + noise(5 * 60_000));
+    const c = roomConditions(d);
+    if (!c.occupied || rand() > 0.45) continue;
+    const v = vote(c.temp, c.hum);
+    const picks = COMMENTS[v]!;
+    votes.push({
+      roomId,
+      userId: occupants[Math.floor(rand() * occupants.length)]!.id,
+      vote: v,
+      comfortable: v === "perfect" || rand() < 0.15,
+      comment: picks[Math.floor(rand() * picks.length)]!,
+      temperatureC: +c.temp.toFixed(2),
+      humidityPct: +c.hum.toFixed(1),
+      source: "mobile" as const,
+      createdAt: d,
+    });
+  }
+  // A burst of "too hot" right now, so the dashboard shows a live problem.
   for (let i = 0; i < 4; i++) {
     votes.push({
-      roomId: roomIds.get("BK-02")!,
+      roomId,
       userId: occupants[i]!.id,
       vote: "too_hot" as const,
       comfortable: false,
       comment: ["Too warm, sweating", "Very stuffy", "", "Please lower the AC"][i]!,
-      temperatureC: 27.6,
+      temperatureC: 26.9,
       humidityPct: 61,
       source: "mobile" as const,
       createdAt: new Date(now - (25 - i * 6) * 60_000),
@@ -187,51 +191,35 @@ async function main() {
   }
   await db.insert(feedback).values(votes);
 
-  // Make sure each room's latest reading reflects "right now" during working hours.
-  const latest = { "BK-01": [21.4, 54], "BK-02": [27.6, 61], "BK-03": [24.1, 57], "BA-101": [24.9, 76] } as const;
-  for (const [code, [t, h]] of Object.entries(latest)) {
-    await db.insert(sensorReadings).values({ roomId: roomIds.get(code)!, sensorId: sensorIds.get(code)!, temperatureC: t, humidityPct: h, pressureHpa: 1008.4, recordedAt: new Date() });
-  }
-
-  // --- PICs ---
-  await db.insert(pics).values([
-    { roomId: roomIds.get("BK-02")!, name: "Encik Faizal", email: "faizal@hitl.test", phone: "+60123456789" },
-    { roomId: roomIds.get("BA-101")!, name: "Puan Rohana", email: "rohana@hitl.test", phone: "+60198765432" },
+  // Latest readings: a warm afternoon on level 21.
+  await db.insert(sensorReadings).values([
+    { roomId, sensorId: sensorIds[0]!, temperatureC: 26.5, humidityPct: 62, pressureHpa: 1006.2, recordedAt: new Date(now - 60_000) },
+    { roomId, sensorId: sensorIds[1]!, temperatureC: 27.2, humidityPct: 60, pressureHpa: 1006.1, recordedAt: new Date() },
   ]);
+
+  // --- PIC ---
+  await db.insert(pics).values({ roomId, name: "Encik Faizal", email: "faizal@hitl.test", phone: "+60123456789" });
 
   // --- alerts ---
   const ago = (min: number) => new Date(now - min * 60_000);
-  await db.insert(alerts).values([
-    {
-      roomId: roomIds.get("BK-02")!,
-      kind: "feedback",
-      severity: "critical",
-      message: "4 of 4 occupants said the room is too hot in the last 30 minutes.",
-      createdAt: ago(9),
-      escalatedAt: ago(3),
-      notifyCount: 2,
-      lastNotifiedAt: ago(3),
-    },
-    {
-      roomId: roomIds.get("BA-101")!,
-      kind: "humidity",
-      severity: "warning",
-      status: "acknowledged",
-      message: "Humidity is 81%, above the 70% comfort limit.",
-      createdAt: ago(140),
-      acknowledgedAt: ago(120),
-      notifyCount: 1,
-      lastNotifiedAt: ago(140),
-    },
-  ]);
+  await db.insert(alerts).values({
+    roomId,
+    kind: "feedback",
+    severity: "critical",
+    message: "4 of 4 occupants said the room is too hot in the last 30 minutes.",
+    createdAt: ago(9),
+    escalatedAt: ago(3),
+    notifyCount: 2,
+    lastNotifiedAt: ago(3),
+  });
   const [done] = await db
     .insert(alerts)
     .values({
-      roomId: roomIds.get("BK-01")!,
+      roomId,
       kind: "manual",
       severity: "warning",
       status: "resolved",
-      message: "AC vent dripping onto the front row.",
+      message: "AC vent dripping near the pantry.",
       createdBy: fm!.id,
       createdAt: ago(60 * 26),
       resolvedAt: ago(60 * 22),
@@ -242,11 +230,118 @@ async function main() {
     })
     .returning();
   await db.insert(actions).values([
-    { roomId: roomIds.get("BK-01")!, alertId: done!.id, userId: fm!.id, note: "Maintenance cleared the drain pipe.", createdAt: ago(60 * 22) },
-    { roomId: roomIds.get("BK-01")!, userId: fm!.id, note: "Raised AC setpoint from 20 °C to 22 °C after cold complaints.", createdAt: ago(60 * 5) },
+    { roomId, alertId: done!.id, userId: fm!.id, note: "Maintenance cleared the drain pipe.", createdAt: ago(60 * 22) },
+    { roomId, userId: fm!.id, note: "Raised AC setpoint from 21 °C to 23 °C after cold complaints in the morning.", createdAt: ago(60 * 5) },
   ]);
 
-  console.log(`Seeded: ${2 + occupants.length} users, ${PROFILES.length} rooms, ${votes.length} votes, 7 days of readings.`);
+  // --- past model training runs (dummy results; a real retrain adds a new row) ---
+  const day = (d: number, hour = 9) => new Date(now - d * 86_400_000 - (myHour(new Date(now)) - hour) * 3_600_000);
+  await db.insert(modelRuns).values([
+    {
+      status: "skipped",
+      trainingRows: 18,
+      metrics: { class_counts: { too_cold: 4, perfect: 11, too_hot: 3 } },
+      error: "Need at least 30 labelled votes, have 18.",
+      startedAt: day(6),
+      finishedAt: day(6),
+    },
+    {
+      status: "succeeded",
+      algorithm: "random_forest",
+      trainingRows: 54,
+      metrics: { accuracy: 0.7273, f1_macro: 0.6818, holdout_rows: 11, class_counts: { too_cold: 12, perfect: 29, too_hot: 13 } },
+      startedAt: day(4),
+      finishedAt: day(4),
+    },
+    {
+      status: "succeeded",
+      algorithm: "random_forest",
+      trainingRows: 96,
+      metrics: { accuracy: 0.7368, f1_macro: 0.6984, holdout_rows: 19, class_counts: { too_cold: 21, perfect: 48, too_hot: 27 } },
+      startedAt: day(2),
+      finishedAt: day(2),
+    },
+  ]);
+
+  // --- AI insights (demo text, labelled as such in the portal) ---
+  const tooHotAfternoon = votes.filter((v) => v.vote === "too_hot" && myHour(v.createdAt) >= 14).length;
+  const tooHotAll = votes.filter((v) => v.vote === "too_hot").length;
+  const tooColdMorning = votes.filter((v) => v.vote === "too_cold" && myHour(v.createdAt) < 10).length;
+  const tooColdAll = votes.filter((v) => v.vote === "too_cold").length;
+  const perfectShare = Math.round((votes.filter((v) => v.vote === "perfect").length / votes.length) * 100);
+  await db.insert(aiInsights).values([
+    {
+      roomId,
+      kind: "summary",
+      title: "Level 21 this week",
+      body: [
+        `Afternoons run 2 to 3 °C warmer on the sensor B side than on sensor A, peaking around 15:00.`,
+        `${tooHotAfternoon} of ${tooHotAll} "too hot" votes came after 14:00, and ${tooColdMorning} of ${tooColdAll} "too cold" votes came before 10:00.`,
+        `Overall ${perfectShare}% of votes said perfect. Right now 4 of 4 recent votes say too hot.`,
+      ].join("\n"),
+      source: "demo",
+      createdAt: ago(20),
+    },
+    {
+      roomId,
+      kind: "suggestion",
+      priority: "high",
+      title: "Lower the setpoint to 23 °C from 14:00 on weekdays",
+      body: "Most too-hot votes land between 14:00 and 17:00, when sensor B passes 26 °C. A lower afternoon setpoint should bring that side back into the comfort band.",
+      source: "demo",
+      createdAt: ago(20),
+    },
+    {
+      roomId,
+      kind: "suggestion",
+      priority: "medium",
+      title: "Close the blinds on the sensor B side after lunch",
+      body: "Sensor B warms about twice as fast as sensor A in the afternoon, which points to sun through the windows on that side rather than the AC.",
+      source: "demo",
+      createdAt: ago(20),
+    },
+    {
+      roomId,
+      kind: "suggestion",
+      priority: "low",
+      title: "Start the morning at 24 °C instead of 23 °C",
+      body: "Too-cold votes cluster before 10:00 while the room sits near 23.4 °C. Starting one degree warmer should cut those and save some cooling energy.",
+      source: "demo",
+      createdAt: ago(20),
+    },
+    {
+      roomId,
+      kind: "suggestion",
+      priority: "medium",
+      title: "Check the AC drain near the pantry",
+      body: "A dripping vent was reported there. Humidity on that side ran a little higher the same day.",
+      status: "accepted",
+      source: "demo",
+      decidedBy: fm!.id,
+      decidedAt: ago(60 * 25),
+      createdAt: ago(60 * 27),
+    },
+    {
+      roomId,
+      kind: "suggestion",
+      priority: "low",
+      title: "Move sensor A away from the supply vent",
+      body: "Sensor A sometimes reads colder than the votes suggest, which can happen when cold air blows straight onto it.",
+      status: "dismissed",
+      source: "demo",
+      decidedBy: fm!.id,
+      decidedAt: ago(60 * 30),
+      createdAt: ago(60 * 48),
+    },
+  ]);
+  await db.insert(actions).values({
+    roomId,
+    userId: fm!.id,
+    note: "Accepted AI suggestion: Check the AC drain near the pantry",
+    createdAt: ago(60 * 25),
+  });
+
+  console.log(`Seeded: ${2 + occupants.length} users, ${BUILDING} ${ROOM.name} with ${SENSORS.length} sensors, ${votes.length} votes, 7 days of readings.`);
   console.log(`Sign in as ${admin!.email} with DEV_ADMIN_PASSWORD from .env.`);
 }
 

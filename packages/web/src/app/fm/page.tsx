@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { and, count, gt, ne } from "drizzle-orm";
 import { alerts, feedback } from "@hitl/db";
+import { AiInsightsTeaser } from "@/components/AiInsights";
 import { LiveRooms, type LiveRoom } from "@/components/LiveRooms";
 import { PageHeader, Stat } from "@/components/ui";
 import { checkOfflineSensors, escalateStaleAlerts } from "@/lib/alerts";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { listInsights } from "@/lib/insights";
 import { roomStatuses } from "@/lib/readings";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -15,11 +17,12 @@ export default async function FmDashboard() {
   await checkOfflineSensors();
   await escalateStaleAlerts();
   const day = new Date(Date.now() - 86_400_000);
-  const [statuses, openByRoom, [votes24h], [uncomfortable24h]] = await Promise.all([
+  const [statuses, openByRoom, [votes24h], [uncomfortable24h], insights] = await Promise.all([
     roomStatuses(),
     db().select({ roomId: alerts.roomId, n: count() }).from(alerts).where(ne(alerts.status, "resolved")).groupBy(alerts.roomId),
     db().select({ n: count() }).from(feedback).where(gt(feedback.createdAt, day)),
     db().select({ n: count() }).from(feedback).where(and(gt(feedback.createdAt, day), ne(feedback.vote, "perfect"))),
+    listInsights(),
   ]);
 
   const initial: LiveRoom[] = statuses.map((s) => ({
@@ -62,6 +65,7 @@ export default async function FmDashboard() {
         />
         <Stat icon="bell" label="Open alerts" value={openTotal} tone={openTotal ? "danger" : undefined} />
       </div>
+      <AiInsightsTeaser data={insights} />
       <LiveRooms initial={initial} />
     </>
   );
