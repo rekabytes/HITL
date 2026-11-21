@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
 import { users } from "@hitl/db";
 import { ActionForm } from "@/components/ActionForm";
-import { PageHeader } from "@/components/Shell";
+import { Badge, initials, PageHeader, PanelHead } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { timeAgo } from "@/lib/time";
@@ -22,10 +22,14 @@ export default async function UsersPage() {
 
   return (
     <>
-      <PageHeader title="Users" sub="Staff accounts are made here. Occupants sign up from the mobile app." />
+      <PageHeader
+        eyebrow={{ icon: "shield", text: "Administration" }}
+        title="Users"
+        sub="Staff accounts are made here. Occupants sign up from the mobile app."
+      />
       <section className="panel">
-        <h2>Add a user</h2>
-        <ActionForm action={createUserAction} submitLabel="Create user">
+        <PanelHead icon="plus" title="Add a user" />
+        <ActionForm action={createUserAction} submitLabel="Create user" icon="plus">
           <div className="form-row">
             <label>
               Name
@@ -51,14 +55,13 @@ export default async function UsersPage() {
         </ActionForm>
       </section>
 
-      <section className="panel">
-        <h2>All users ({rows.length})</h2>
+      <section className="panel panel-flush">
+        <PanelHead icon="users" title="All users" count={rows.length} />
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Email</th>
+                <th>User</th>
                 <th>Role and access</th>
                 <th>Last active</th>
                 <th>Reset password</th>
@@ -68,29 +71,35 @@ export default async function UsersPage() {
               {rows.map((u) => (
                 <tr key={u.id}>
                   <td>
-                    {u.name}
-                    {u.id === me.id && <span className="badge" style={{ marginLeft: 6 }}>you</span>}
-                    {u.mustChangePassword && <div className="small muted">must set a new password</div>}
+                    <div style={{ display: "flex", gap: "0.65rem", alignItems: "center" }}>
+                      <span className="avatar">{initials(u.name)}</span>
+                      <div>
+                        <div className="cell-title">
+                          {u.name} {u.id === me.id && <Badge>you</Badge>}
+                        </div>
+                        <div className="cell-sub">{u.email}</div>
+                        {u.mustChangePassword && <div className="cell-sub" style={{ color: "var(--warn)" }}>Must set a new password</div>}
+                      </div>
+                    </div>
                   </td>
-                  <td>{u.email}</td>
                   <td>
-                    <ActionForm action={updateUserAction} submitLabel="Save" variant="ghost" className="form-inline">
+                    <ActionForm action={updateUserAction} submitLabel="Save" icon="save" variant="ghost" size="sm" className="form-inline">
                       <input type="hidden" name="id" value={u.id} />
-                      <select name="role" defaultValue={u.role} aria-label="Role">
+                      <select name="role" defaultValue={u.role} aria-label="Role" className="input-sm">
                         {ROLE_OPTIONS.map((r) => (
                           <option key={r.value} value={r.value}>{r.label}</option>
                         ))}
                       </select>
-                      <label className="form-inline" style={{ fontWeight: 400 }}>
-                        <input type="checkbox" name="active" defaultChecked={u.active} /> active
+                      <label className="check">
+                        <input type="checkbox" name="active" defaultChecked={u.active} /> Active
                       </label>
                     </ActionForm>
                   </td>
-                  <td className="small">{timeAgo(u.lastActiveAt)}</td>
+                  <td className="small muted nowrap">{timeAgo(u.lastActiveAt)}</td>
                   <td>
-                    <ActionForm action={resetPasswordAction} submitLabel="Reset" variant="ghost" className="form-inline">
+                    <ActionForm action={resetPasswordAction} submitLabel="Reset" icon="key" variant="ghost" size="sm" className="form-inline">
                       <input type="hidden" name="id" value={u.id} />
-                      <input name="password" type="text" minLength={8} placeholder="temporary password" required autoComplete="off" />
+                      <input name="password" type="text" minLength={8} placeholder="Temporary password" required autoComplete="off" className="input-sm" />
                     </ActionForm>
                   </td>
                 </tr>

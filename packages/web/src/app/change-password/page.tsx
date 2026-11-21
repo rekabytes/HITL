@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { users } from "@hitl/db";
 import { passwordSchema } from "@hitl/shared";
 import { ActionForm } from "@/components/ActionForm";
+import { AuthCard } from "@/components/AuthCard";
+import { Icon } from "@/components/Icon";
 import { destroyUserSessions, hashPassword, requireUser, secretHash, sessionToken, verifyPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { FormState } from "@/lib/form";
@@ -34,36 +36,34 @@ async function changePassword(_prev: FormState, form: FormData): Promise<FormSta
 export default async function ChangePasswordPage() {
   const user = await requireUser(undefined, { allowPasswordChange: true });
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <div>
-          <h1>Change password</h1>
-          <p className="sub">
-            {user.mustChangePassword
-              ? "An admin set a temporary password for you. Pick your own to continue."
-              : `Signed in as ${user.email}.`}
-          </p>
-        </div>
-        <ActionForm action={changePassword} submitLabel="Save password">
-          <label>
-            Current password
-            <input name="current" type="password" autoComplete="current-password" required />
-          </label>
-          <label>
-            New password
-            <input name="password" type="password" autoComplete="new-password" minLength={8} required />
-          </label>
-          <label>
-            Confirm new password
-            <input name="confirm" type="password" autoComplete="new-password" minLength={8} required />
-          </label>
-        </ActionForm>
-        {!user.mustChangePassword && (
-          <a href="/" className="link-muted">
-            Back
-          </a>
-        )}
-      </div>
-    </div>
+    <AuthCard
+      title="Change password"
+      sub={
+        user.mustChangePassword
+          ? "An admin set a temporary password for you. Pick your own to continue."
+          : `Signed in as ${user.email}.`
+      }
+    >
+      <ActionForm action={changePassword} submitLabel="Save password" icon="lock" block>
+        <label>
+          Current password
+          <input name="current" type="password" autoComplete="current-password" required />
+        </label>
+        <label>
+          New password
+          <input name="password" type="password" autoComplete="new-password" minLength={8} required />
+        </label>
+        <label>
+          Confirm new password
+          <input name="confirm" type="password" autoComplete="new-password" minLength={8} required />
+        </label>
+      </ActionForm>
+      {!user.mustChangePassword && (
+        <a href="/" className="btn btn-ghost btn-block">
+          <Icon name="chevron-left" size={15} />
+          Back
+        </a>
+      )}
+    </AuthCard>
   );
 }

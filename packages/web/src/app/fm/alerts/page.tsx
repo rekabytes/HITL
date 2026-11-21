@@ -2,25 +2,31 @@ import type { Metadata } from "next";
 import { desc, eq, ne } from "drizzle-orm";
 import { alerts, rooms, users } from "@hitl/db";
 import { ActionForm } from "@/components/ActionForm";
-import { PageHeader } from "@/components/Shell";
+import { Icon, type IconName } from "@/components/Icon";
+import { Badge, Empty, PageHeader, PanelHead } from "@/components/ui";
+import { checkOfflineSensors, escalateStaleAlerts } from "@/lib/alerts";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { listRooms } from "@/lib/readings";
-import { formatDateTime } from "@/lib/time";
-import { checkOfflineSensors, escalateStaleAlerts } from "@/lib/alerts";
 import { env } from "@/lib/env";
+import { listRooms } from "@/lib/readings";
+import { formatDateTime, timeAgo } from "@/lib/time";
 import { acknowledgeAlertAction, createAlertAction, renotifyAlertAction, resolveAlertAction } from "../actions";
 
 export const metadata: Metadata = { title: "Alerts" };
 
-const SEVERITY = { info: "badge", warning: "badge badge-warn", critical: "badge badge-danger" } as const;
-const KIND = {
-  temperature: "Temperature",
-  humidity: "Humidity",
-  feedback: "Occupant votes",
-  sensor_offline: "Sensor offline",
-  manual: "Reported",
-} as const;
+const SEVERITY = {
+  info: { tone: "neutral", icon: "info" },
+  warning: { tone: "warn", icon: "alert-circle" },
+  critical: { tone: "danger", icon: "alert-triangle" },
+} as const satisfies Record<string, { tone: "neutral" | "warn" | "danger"; icon: IconName }>;
+
+const KIND: Record<string, { label: string; icon: IconName }> = {
+  temperature: { label: "Temperature", icon: "thermometer" },
+  humidity: { label: "Humidity", icon: "droplet" },
+  feedback: { label: "Occupant votes", icon: "message-square" },
+  sensor_offline: { label: "Sensor offline", icon: "wifi-off" },
+  manual: { label: "Reported by staff", icon: "user" },
+};
 
 export default async function AlertsPage() {
   await requireStaff();
@@ -41,133 +47,121 @@ export default async function AlertsPage() {
   return (
     <>
       <PageHeader
+        eyebrow={{ icon: "bell", text: "Facility management" }}
         title="Alerts"
-        sub={`Raised automatically from readings, votes and quiet sensors, or reported by staff. The room's person in charge is emailed when an alert opens, and again as an escalation if nobody acknowledges it within ${env.escalateAfterMin} minutes.`}
+        sub={`Raised from readings, votes and quiet sensors, or reported by staff. The person in charge is emailed when an alert opens, and again as an escalation if nobody acknowledges it within ${env.escalateAfterMin} minutes.`}
       />
+
       <section className="panel">
-        <h2>Open ({open.length})</h2>
+        <PanelHead icon="bell" title="Open" count={open.length} />
         {open.length === 0 ? (
-          <p className="empty">Nothing open.</p>
+          <Empty icon="check-circle">Nothing open. All rooms are fine.</Empty>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Opened</th>
-                  <th>Room</th>
-                  <th>Type</th>
-                  <th>Message</th>
-                  <th>Status</th>
-                  <th>Email</th>
-                  <th>Resolve</th>
-                </tr>
-              </thead>
-              <tbody>
-                {open.map(({ alert: a, code, roomName }) => (
-                  <tr key={a.id}>
-                    <td className="small">{formatDateTime(a.createdAt)}</td>
-                    <td>
-                      <strong>{code ?? "—"}</strong>
-                      {roomName && <div className="small muted">{roomName}</div>}
-                    </td>
-                    <td>
-                      <span className={SEVERITY[a.severity]}>{a.severity}</span>
-                      {a.escalatedAt && <span className="badge badge-danger" style={{ marginLeft: 4 }}>escalated</span>}
-                      <div className="small muted">{KIND[a.kind]}</div>
-                    </td>
-                    <td>{a.message}</td>
-                    <td>
-                      {a.status === "open" ? (
-                        <ActionForm action={acknowledgeAlertAction} submitLabel="Acknowledge" variant="ghost" className="form-inline">
+          <div className="alert-list">
+            {open.map(({ alert: a, code, roomName }) => {
+              const sev = SEVERITY[a.severity];
+              const kind = KIND[a.kind]!;
+              return (
+                <article key={a.id} className={`alert-item sev-${a.severity}`}>
+                  <span className={`alert-icon sev-${a.severity}`}>
+                    <Icon name={sev.icon} size={18} />
+                  </span>
+                  <div className="alert-body">
+                    <div className="alert-top">
+                      <strong>{code ?? "No room"}</strong>
+                      {roomName && <span className="muted small">{roomName}</span>}
+                      <Badge tone={sev.tone}>{a.severity}</Badge>
+                      {a.escalatedAt && <Badge tone="danger" icon="alert-triangle">Escalated</Badge>}
+                      {a.status === "acknowledged" && <Badge icon="eye">Seen</Badge>}
+                    </div>
+                    <p className="alert-msg">{a.message}</p>
+                    <div className="alert-meta">
+                      <span><Icon name={kind.icon} size={12} />{kind.label}</span>
+                      <span title={formatDateTime(a.createdAt)}><Icon name="clock" size={12} />{timeAgo(a.createdAt)}</span>
+                      <span>
+                        <Icon name="mail" size={12} />
+                        {a.notifyCount > 0 ? `Emailed ${a.notifyCount}×, last ${timeAgo(a.lastNotifiedAt)}` : "Not emailed"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="alert-actions">
+                    <div className="form-inline">
+                      {a.status === "open" && (
+                        <ActionForm action={acknowledgeAlertAction} submitLabel="Acknowledge" icon="eye" variant="ghost" size="sm" className="form-inline">
                           <input type="hidden" name="id" value={a.id} />
                         </ActionForm>
-                      ) : (
-                        <span className="badge">seen {a.acknowledgedAt ? formatDateTime(a.acknowledgedAt) : ""}</span>
                       )}
-                    </td>
-                    <td>
-                      <div className="small muted">
-                        {a.notifyCount > 0 ? `Sent ${a.notifyCount}×, last ${formatDateTime(a.lastNotifiedAt)}` : "Not sent"}
-                      </div>
-                      <ActionForm action={renotifyAlertAction} submitLabel="Re-notify" variant="ghost" className="form-inline">
+                      <ActionForm action={renotifyAlertAction} submitLabel="Re-notify" icon="send" variant="ghost" size="sm" className="form-inline">
                         <input type="hidden" name="id" value={a.id} />
                       </ActionForm>
-                    </td>
-                    <td>
-                      <ActionForm action={resolveAlertAction} submitLabel="Resolve" className="form-inline">
-                        <input type="hidden" name="id" value={a.id} />
-                        <input name="note" placeholder="what fixed it" required maxLength={2000} />
-                      </ActionForm>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    <ActionForm action={resolveAlertAction} submitLabel="Resolve" icon="check" size="sm" className="form-inline">
+                      <input type="hidden" name="id" value={a.id} />
+                      <input name="note" placeholder="What fixed it?" required maxLength={2000} className="input-sm" />
+                    </ActionForm>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
 
-      <section className="panel">
-        <h2>Report a problem</h2>
-        <ActionForm action={createAlertAction} submitLabel="Open alert">
-          <div className="form-row">
+      <div className="grid grid-2 mt">
+        <section className="panel">
+          <PanelHead icon="plus" title="Report a problem" />
+          <ActionForm action={createAlertAction} submitLabel="Open alert" icon="bell">
+            <div className="form-row">
+              <label>
+                Room
+                <select name="roomId" required>
+                  {roomRows.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.code} · {r.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Severity
+                <select name="severity" defaultValue="warning">
+                  <option value="info">Info</option>
+                  <option value="warning">Warning</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+            </div>
             <label>
-              Room
-              <select name="roomId" required>
-                {roomRows.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.code} · {r.name}
-                  </option>
-                ))}
-              </select>
+              Message
+              <textarea name="message" required maxLength={1000} placeholder="AC unit leaking near the window" />
             </label>
-            <label>
-              Severity
-              <select name="severity" defaultValue="warning">
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="critical">Critical</option>
-              </select>
-            </label>
-          </div>
-          <label>
-            Message
-            <textarea name="message" required maxLength={1000} placeholder="AC unit leaking near the window" />
-          </label>
-        </ActionForm>
-      </section>
+          </ActionForm>
+        </section>
 
-      <section className="panel">
-        <h2>Recently resolved</h2>
-        {resolved.length === 0 ? (
-          <p className="empty">None yet.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Resolved</th>
-                  <th>Room</th>
-                  <th>Message</th>
-                  <th>Fix</th>
-                  <th>By</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resolved.map(({ alert: a, code, resolver }) => (
-                  <tr key={a.id}>
-                    <td className="small">{formatDateTime(a.resolvedAt)}</td>
-                    <td><strong>{code ?? "—"}</strong></td>
-                    <td>{a.message}</td>
-                    <td>{a.resolutionNote}</td>
-                    <td className="small muted">{resolver ?? ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+        <section className="panel">
+          <PanelHead icon="check-circle" title="Recently resolved" count={resolved.length} />
+          {resolved.length === 0 ? (
+            <Empty icon="check-circle">None yet.</Empty>
+          ) : (
+            <ul className="timeline">
+              {resolved.map(({ alert: a, code, resolver }) => (
+                <li key={a.id}>
+                  <span className="tl-dot"><Icon name="check" size={11} strokeWidth={3} /></span>
+                  <div>
+                    <div className="small">
+                      <strong>{code ?? "—"}</strong> <span className="muted">{a.message}</span>
+                    </div>
+                    {a.resolutionNote && <div className="small" style={{ marginTop: 2 }}>{a.resolutionNote}</div>}
+                    <div className="tiny faint" style={{ marginTop: 2 }}>
+                      {formatDateTime(a.resolvedAt)}{resolver ? ` · ${resolver}` : ""}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </>
   );
 }

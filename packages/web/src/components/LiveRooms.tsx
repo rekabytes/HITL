@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "./Icon";
+import { VoteBadge } from "./VoteBadge";
 
 export interface LiveRoom {
   id: string;
@@ -24,7 +26,7 @@ type Event =
 const STALE_MS = 30 * 60_000;
 
 function ago(iso: string | null, now: number) {
-  if (!iso) return "no data";
+  if (!iso) return "no data yet";
   const s = Math.round((now - new Date(iso).getTime()) / 1000);
   if (s < 60) return `${Math.max(s, 0)}s ago`;
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
@@ -77,45 +79,85 @@ export function LiveRooms({ initial }: { initial: LiveRoom[] }) {
   }, []);
 
   if (rooms.length === 0) {
-    return <p className="panel empty">No rooms yet. An admin adds them under Rooms and sensors.</p>;
+    return (
+      <div className="panel empty">
+        <Icon name="home" size={26} strokeWidth={1.6} />
+        No rooms yet. An admin adds them under Rooms and sensors.
+      </div>
+    );
   }
 
   return (
     <>
-      <p className="small muted" style={{ marginBottom: "0.75rem" }}>
-        Live feed:{" "}
-        {connected ? <span className="badge badge-ok">connected</span> : <span className="badge badge-warn">reconnecting</span>}
-      </p>
+      <div className="live" aria-live="polite">
+        <span className={connected ? "pulse" : "pulse off"} />
+        {connected ? "Live updates on" : "Reconnecting to live updates"}
+      </div>
       <div className="grid grid-cards">
         {rooms.map((r) => {
           const stale = !r.recordedAt || now - new Date(r.recordedAt).getTime() > STALE_MS;
+          const level = stale ? "none" : r.level;
           return (
-            <article key={`${r.id}-${flash[r.id] ?? 0}`} className={`room-card level-${stale ? "none" : r.level} ${flash[r.id] ? "flash" : ""}`}>
+            <article key={`${r.id}-${flash[r.id] ?? 0}`} className={`room-card level-${level} ${flash[r.id] ? "flash" : ""}`}>
               <div className="top">
                 <span className="code">{r.code}</span>
-                {r.openAlerts > 0 && <span className="badge badge-danger">{r.openAlerts} alert{r.openAlerts > 1 ? "s" : ""}</span>}
+                {r.openAlerts > 0 ? (
+                  <span className="badge badge-danger">
+                    <Icon name="bell" size={12} />
+                    {r.openAlerts} open
+                  </span>
+                ) : stale ? (
+                  <span className="badge badge-warn">
+                    <Icon name="wifi-off" size={12} />
+                    quiet
+                  </span>
+                ) : (
+                  <span className="badge badge-ok">
+                    <Icon name="wifi" size={12} />
+                    live
+                  </span>
+                )}
               </div>
               <div className="where">
+                <Icon name="map-pin" size={12} />
                 {r.name} · {r.buildingName}
               </div>
-              <div className="readings">
-                <div>
-                  <div className="big">{r.temperatureC !== null ? r.temperatureC.toFixed(1) : "—"}</div>
-                  <div className="unit">°C</div>
+              <div className="metrics">
+                <div className="metric">
+                  <div className="m-label">
+                    <Icon name="thermometer" size={12} />
+                    Temperature
+                  </div>
+                  <div className="m-value">
+                    {r.temperatureC !== null ? r.temperatureC.toFixed(1) : "—"}
+                    <small>°C</small>
+                  </div>
                 </div>
-                <div>
-                  <div className="big">{r.humidityPct !== null ? r.humidityPct.toFixed(0) : "—"}</div>
-                  <div className="unit">% RH</div>
+                <div className="metric">
+                  <div className="m-label">
+                    <Icon name="droplet" size={12} />
+                    Humidity
+                  </div>
+                  <div className="m-value">
+                    {r.humidityPct !== null ? r.humidityPct.toFixed(0) : "—"}
+                    <small>%</small>
+                  </div>
                 </div>
               </div>
               <div className="votes" title="Votes in the last 30 minutes">
-                <span className="badge badge-cold">{r.votes.tooCold} cold</span>
-                <span className="badge badge-ok">{r.votes.perfect} perfect</span>
-                <span className="badge badge-danger">{r.votes.tooHot} hot</span>
+                <VoteBadge vote="too_cold" count={r.votes.tooCold} />
+                <VoteBadge vote="perfect" count={r.votes.perfect} />
+                <VoteBadge vote="too_hot" count={r.votes.tooHot} />
               </div>
-              <p className="small muted" style={{ margin: "0.6rem 0 0" }}>
-                {stale ? `Sensor quiet, last reading ${ago(r.recordedAt, now)}` : r.advice ?? `Updated ${ago(r.recordedAt, now)}`}
-              </p>
+              <div className="room-foot">
+                <Icon
+                  name={stale ? "clock" : level === "action" ? "alert-triangle" : level === "advice" ? "info" : "check-circle"}
+                  size={14}
+                />
+                <span>
+                  {stale ? `Last reading ${ago(r.recordedAt, now)}. Check the sensor.` : (r.advice ?? `All good. Updated ${ago(r.recordedAt, now)}.`)}
+                </span>
+              </div>
             </article>
           );
         })}

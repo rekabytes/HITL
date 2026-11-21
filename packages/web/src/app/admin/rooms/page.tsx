@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
 import { buildings, sensorRooms, sensors } from "@hitl/db";
 import { ActionForm } from "@/components/ActionForm";
-import { PageHeader } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { Badge, Empty, EmptyRow, PageHeader, PanelHead } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { listRooms } from "@/lib/readings";
@@ -21,6 +22,8 @@ import {
 
 export const metadata: Metadata = { title: "Rooms and sensors" };
 
+const ONLINE_MS = 10 * 60_000;
+
 export default async function RoomsPage() {
   await requireAdmin();
   const [buildingRows, roomRows, sensorRows, links] = await Promise.all([
@@ -37,16 +40,20 @@ export default async function RoomsPage() {
       {r.code} · {r.name}
     </option>
   ));
-  const multiSize = Math.min(Math.max(roomRows.length, 2), 6);
+  const multiSize = Math.min(Math.max(roomRows.length, 2), 5);
 
   return (
     <>
-      <PageHeader title="Rooms and sensors" sub="Room codes go into the QR codes occupants scan. A sensor can report for one room or several." />
+      <PageHeader
+        eyebrow={{ icon: "shield", text: "Administration" }}
+        title="Rooms and sensors"
+        sub="Room codes go into the QR codes occupants scan. A sensor can report for one room or several."
+      />
 
       <div className="grid grid-2">
         <section className="panel">
-          <h2>Buildings</h2>
-          <ActionForm action={createBuildingAction} submitLabel="Add building">
+          <PanelHead icon="layers" title="Buildings" count={buildingRows.length} />
+          <ActionForm action={createBuildingAction} submitLabel="Add building" icon="plus">
             <div className="form-row">
               <label>
                 Name
@@ -54,20 +61,25 @@ export default async function RoomsPage() {
               </label>
               <label>
                 Address
-                <input name="address" />
+                <input name="address" placeholder="Optional" />
               </label>
             </div>
           </ActionForm>
           {buildingRows.length > 0 && (
-            <table style={{ marginTop: "0.75rem" }}>
+            <table className="plain-table mt">
               <tbody>
                 {buildingRows.map((b) => (
                   <tr key={b.id}>
-                    <td><strong>{b.name}</strong>{b.address && <div className="small muted">{b.address}</div>}</td>
-                    <td className="num small">{roomCount(b.id)} {roomCount(b.id) === 1 ? "room" : "rooms"}</td>
                     <td>
+                      <div className="cell-title">{b.name}</div>
+                      {b.address && <div className="cell-sub">{b.address}</div>}
+                    </td>
+                    <td className="small muted nowrap">
+                      {roomCount(b.id)} {roomCount(b.id) === 1 ? "room" : "rooms"}
+                    </td>
+                    <td style={{ width: 1 }}>
                       {roomCount(b.id) === 0 && (
-                        <ActionForm action={deleteBuildingAction} submitLabel="Delete" variant="ghost" className="form-inline">
+                        <ActionForm action={deleteBuildingAction} submitLabel="Delete" icon="trash-2" variant="ghost" size="sm" className="form-inline">
                           <input type="hidden" name="id" value={b.id} />
                         </ActionForm>
                       )}
@@ -80,11 +92,11 @@ export default async function RoomsPage() {
         </section>
 
         <section className="panel">
-          <h2>Add a room</h2>
+          <PanelHead icon="plus" title="Add a room" />
           {buildingRows.length === 0 ? (
-            <p className="muted">Add a building first.</p>
+            <Empty icon="layers">Add a building first.</Empty>
           ) : (
-            <ActionForm action={createRoomAction} submitLabel="Add room">
+            <ActionForm action={createRoomAction} submitLabel="Add room" icon="plus">
               <div className="form-row">
                 <label>
                   Building
@@ -104,7 +116,7 @@ export default async function RoomsPage() {
                 </label>
                 <label>
                   Floor
-                  <input name="floor" />
+                  <input name="floor" placeholder="Optional" />
                 </label>
               </div>
             </ActionForm>
@@ -112,50 +124,58 @@ export default async function RoomsPage() {
         </section>
       </div>
 
-      <section className="panel">
-        <h2>Rooms ({roomRows.length})</h2>
+      <section className="panel panel-flush mt">
+        <PanelHead icon="home" title="Rooms" count={roomRows.length} />
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Building</th>
+                <th>Room</th>
                 <th>Name and floor</th>
                 <th>Sensors</th>
-                <th>QR</th>
-                <th>Delete</th>
+                <th>QR code</th>
+                <th />
               </tr>
             </thead>
             <tbody>
-              {roomRows.length === 0 && (
-                <tr><td colSpan={6} className="empty">No rooms yet.</td></tr>
-              )}
+              {roomRows.length === 0 && <EmptyRow colSpan={5} icon="home">No rooms yet.</EmptyRow>}
               {roomRows.map((r) => (
                 <tr key={r.id}>
-                  <td><strong>{r.code}</strong></td>
-                  <td>{r.buildingName}</td>
                   <td>
-                    <ActionForm action={updateRoomAction} submitLabel="Save" variant="ghost" className="form-inline">
+                    <div className="cell-title">{r.code}</div>
+                    <div className="cell-sub">{r.buildingName}</div>
+                  </td>
+                  <td>
+                    <ActionForm action={updateRoomAction} submitLabel="Save" icon="save" variant="ghost" size="sm" className="form-inline">
                       <input type="hidden" name="id" value={r.id} />
-                      <input name="name" defaultValue={r.name} required aria-label="Room name" />
-                      <input name="floor" defaultValue={r.floor ?? ""} placeholder="floor" aria-label="Floor" style={{ width: 90 }} />
+                      <input name="name" defaultValue={r.name} required aria-label="Room name" className="input-sm" />
+                      <input name="floor" defaultValue={r.floor ?? ""} placeholder="Floor" aria-label="Floor" className="input-sm" style={{ width: 80 }} />
                     </ActionForm>
                   </td>
-                  <td className="num">{sensorsIn(r.id)}</td>
                   <td>
-                    <a href={`/admin/rooms/${r.id}/qr`} target="_blank" rel="noreferrer">QR code</a>
+                    <Badge icon="cpu">{sensorsIn(r.id)}</Badge>
                   </td>
                   <td>
-                    <details>
-                      <summary className="small">Delete…</summary>
-                      <p className="small muted" style={{ maxWidth: 260 }}>
-                        Deletes the room with all its readings, votes, alerts, actions and its person in charge. Type{" "}
-                        <strong>{r.code}</strong> to confirm.
-                      </p>
-                      <ActionForm action={deleteRoomAction} submitLabel="Delete room" variant="danger" className="form-inline">
-                        <input type="hidden" name="id" value={r.id} />
-                        <input name="confirm" required placeholder={r.code} aria-label={`Type ${r.code} to confirm`} style={{ width: 110 }} autoComplete="off" />
-                      </ActionForm>
+                    <a className="btn btn-ghost btn-sm" href={`/admin/rooms/${r.id}/qr`} target="_blank" rel="noreferrer">
+                      <Icon name="external-link" size={14} />
+                      Open
+                    </a>
+                  </td>
+                  <td style={{ width: 1 }}>
+                    <details className="danger-zone">
+                      <summary>
+                        <Icon name="trash-2" size={14} />
+                        Delete
+                      </summary>
+                      <div className="dz-body">
+                        <p className="small muted">
+                          Removes the room with all its readings, votes, alerts, actions and its person in charge. Type <strong>{r.code}</strong> to confirm.
+                        </p>
+                        <ActionForm action={deleteRoomAction} submitLabel="Delete room" icon="trash-2" variant="danger" size="sm" className="form-inline">
+                          <input type="hidden" name="id" value={r.id} />
+                          <input name="confirm" required placeholder={r.code} aria-label={`Type ${r.code} to confirm`} className="input-sm" style={{ width: 110 }} autoComplete="off" />
+                        </ActionForm>
+                      </div>
                     </details>
                   </td>
                 </tr>
@@ -165,13 +185,13 @@ export default async function RoomsPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <h2>Register a sensor</h2>
-        <p className="small muted">
+      <section className="panel mt">
+        <PanelHead icon="cpu" title="Register a sensor" />
+        <p className="small muted" style={{ marginBottom: "1rem" }}>
           The device key is shown once. The ESP32 sends it in the <code>X-Device-Key</code> header to <code>/api/sensor</code>.
           Hold Ctrl (Cmd on a Mac) to pick more than one room.
         </p>
-        <ActionForm action={createSensorAction} submitLabel="Register sensor">
+        <ActionForm action={createSensorAction} submitLabel="Register sensor" icon="plus">
           <div className="form-row">
             <label>
               Device id
@@ -195,59 +215,74 @@ export default async function RoomsPage() {
         </ActionForm>
       </section>
 
-      <section className="panel">
-        <h2>Sensors ({sensorRows.length})</h2>
+      <section className="panel panel-flush mt">
+        <PanelHead icon="cpu" title="Sensors" count={sensorRows.length} />
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Device</th>
-                <th>Last seen</th>
-                <th>Details, rooms and status</th>
+                <th>Status</th>
+                <th>Details and rooms</th>
                 <th>Key</th>
-                <th>Delete</th>
+                <th />
               </tr>
             </thead>
             <tbody>
-              {sensorRows.length === 0 && (
-                <tr><td colSpan={5} className="empty">No sensors registered.</td></tr>
-              )}
-              {sensorRows.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <strong>{s.deviceId}</strong>
-                    {s.firmwareVersion && <div className="small muted">firmware {s.firmwareVersion}</div>}
-                  </td>
-                  <td className="small">{timeAgo(s.lastSeenAt)}</td>
-                  <td>
-                    <ActionForm action={updateSensorAction} submitLabel="Save" variant="ghost" className="form-inline">
-                      <input type="hidden" name="id" value={s.id} />
-                      <input name="label" defaultValue={s.label ?? ""} placeholder="label" aria-label="Label" style={{ width: 140 }} />
-                      <input name="firmwareVersion" defaultValue={s.firmwareVersion ?? ""} placeholder="firmware" aria-label="Firmware version" style={{ width: 100 }} maxLength={64} />
-                      <select name="roomIds" multiple size={multiSize} defaultValue={roomsOf(s.id)} aria-label="Rooms">
-                        {roomOptions}
-                      </select>
-                      <label className="form-inline" style={{ fontWeight: 400 }}>
-                        <input type="checkbox" name="active" defaultChecked={s.active} /> active
-                      </label>
-                    </ActionForm>
-                  </td>
-                  <td>
-                    <ActionForm action={rotateSensorKeyAction} submitLabel="New key" variant="ghost" className="form-inline">
-                      <input type="hidden" name="id" value={s.id} />
-                    </ActionForm>
-                  </td>
-                  <td>
-                    <details>
-                      <summary className="small">Delete…</summary>
-                      <p className="small muted" style={{ maxWidth: 220 }}>Past readings stay in their rooms.</p>
-                      <ActionForm action={deleteSensorAction} submitLabel="Delete sensor" variant="danger" className="form-inline">
+              {sensorRows.length === 0 && <EmptyRow colSpan={5} icon="cpu">No sensors registered.</EmptyRow>}
+              {sensorRows.map((s) => {
+                const online = !!s.lastSeenAt && Date.now() - s.lastSeenAt.getTime() < ONLINE_MS;
+                return (
+                  <tr key={s.id}>
+                    <td>
+                      <div className="cell-title">{s.deviceId}</div>
+                      <div className="cell-sub">{s.firmwareVersion ? `Firmware ${s.firmwareVersion}` : "No firmware set"}</div>
+                    </td>
+                    <td>
+                      {!s.active ? (
+                        <Badge dot>Off</Badge>
+                      ) : online ? (
+                        <Badge tone="ok" dot>Online</Badge>
+                      ) : (
+                        <Badge tone="danger" dot>Offline</Badge>
+                      )}
+                      <div className="cell-sub">{timeAgo(s.lastSeenAt)}</div>
+                    </td>
+                    <td>
+                      <ActionForm action={updateSensorAction} submitLabel="Save" icon="save" variant="ghost" size="sm" className="form-inline">
+                        <input type="hidden" name="id" value={s.id} />
+                        <input name="label" defaultValue={s.label ?? ""} placeholder="Label" aria-label="Label" className="input-sm" style={{ width: 120 }} />
+                        <input name="firmwareVersion" defaultValue={s.firmwareVersion ?? ""} placeholder="Firmware" aria-label="Firmware version" className="input-sm" style={{ width: 90 }} maxLength={64} />
+                        <select name="roomIds" multiple size={Math.min(multiSize, 3)} defaultValue={roomsOf(s.id)} aria-label="Rooms" style={{ minWidth: 180 }}>
+                          {roomOptions}
+                        </select>
+                        <label className="check">
+                          <input type="checkbox" name="active" defaultChecked={s.active} /> Active
+                        </label>
+                      </ActionForm>
+                    </td>
+                    <td>
+                      <ActionForm action={rotateSensorKeyAction} submitLabel="New key" icon="key" variant="ghost" size="sm" className="form-inline">
                         <input type="hidden" name="id" value={s.id} />
                       </ActionForm>
-                    </details>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td style={{ width: 1 }}>
+                      <details className="danger-zone">
+                        <summary>
+                          <Icon name="trash-2" size={14} />
+                          Delete
+                        </summary>
+                        <div className="dz-body">
+                          <p className="small muted">Past readings stay in their rooms.</p>
+                          <ActionForm action={deleteSensorAction} submitLabel="Delete sensor" icon="trash-2" variant="danger" size="sm" className="form-inline">
+                            <input type="hidden" name="id" value={s.id} />
+                          </ActionForm>
+                        </div>
+                      </details>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

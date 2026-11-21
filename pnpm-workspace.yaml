@@ -4,3 +4,5 @@ packages:
 allowBuilds:
   esbuild: true
   sharp: true
+  # Only prints a funding notice.
+  core-js: false

@@ -7,6 +7,8 @@ const config: NextConfig = {
   outputFileTracingRoot: path.join(process.cwd(), "../.."),
   transpilePackages: ["@hitl/shared", "@hitl/db"],
   poweredByHeader: false,
+  // Keep the dev badge away from the sidebar user card.
+  devIndicators: { position: "bottom-right" },
 };
 
 export default config;

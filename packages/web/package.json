@@ -7,7 +7,8 @@
     "dev": "node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "check": "tsc -p tsconfig.json --noEmit",
+    "gen:icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {
     "@hitl/db": "workspace:*",
@@ -29,6 +30,7 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "feather-icons": "^4.29.2",
     "typescript": "~5.9.3"
   }
 }

@@ -113,6 +113,7 @@ async function main() {
   }
 
   const roomIds = new Map<string, string>();
+  const sensorIds = new Map<string, string>();
   for (const p of PROFILES) {
     const [r] = await db.insert(rooms).values({ buildingId: buildingIds.get(p.building)!, code: p.code, name: p.name, floor: p.floor }).returning();
     roomIds.set(p.code, r!.id);
@@ -128,6 +129,7 @@ async function main() {
       })
       .returning();
     await db.insert(sensorRooms).values({ sensorId: s!.id, roomId: r!.id });
+    sensorIds.set(p.code, s!.id);
     if (p.code === "BK-02") console.log(`Device key for esp32-bk-02 (to post live readings): ${key}`);
   }
 
@@ -141,7 +143,7 @@ async function main() {
     for (let t = start; t <= now; t += step) {
       const d = new Date(t);
       const c = conditions(p, d);
-      rows.push({ roomId, temperatureC: +c.temp.toFixed(2), humidityPct: +c.hum.toFixed(1), pressureHpa: +(1008 + noise(2)).toFixed(1), recordedAt: d });
+      rows.push({ roomId, sensorId: sensorIds.get(p.code)!, temperatureC: +c.temp.toFixed(2), humidityPct: +c.hum.toFixed(1), pressureHpa: +(1008 + noise(2)).toFixed(1), recordedAt: d });
     }
     for (let i = 0; i < rows.length; i += 1000) await db.insert(sensorReadings).values(rows.slice(i, i + 1000));
   }
@@ -188,7 +190,7 @@ async function main() {
   // Make sure each room's latest reading reflects "right now" during working hours.
   const latest = { "BK-01": [21.4, 54], "BK-02": [27.6, 61], "BK-03": [24.1, 57], "BA-101": [24.9, 76] } as const;
   for (const [code, [t, h]] of Object.entries(latest)) {
-    await db.insert(sensorReadings).values({ roomId: roomIds.get(code)!, temperatureC: t, humidityPct: h, pressureHpa: 1008.4, recordedAt: new Date() });
+    await db.insert(sensorReadings).values({ roomId: roomIds.get(code)!, sensorId: sensorIds.get(code)!, temperatureC: t, humidityPct: h, pressureHpa: 1008.4, recordedAt: new Date() });
   }
 
   // --- PICs ---

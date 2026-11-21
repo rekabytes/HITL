@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { THERMAL_VOTES, THERMAL_VOTE_LABELS } from "@hitl/shared";
-import { PageHeader } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { Badge, EmptyRow, PageHeader } from "@/components/ui";
 import { VoteBadge } from "@/components/VoteBadge";
 import { requireStaff } from "@/lib/auth";
 import { listFeedback } from "@/lib/feedback";
@@ -23,6 +24,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
     listRooms(),
   ]);
   const hasNext = rows.length > PAGE;
+  const filtered = ["room", "vote", "from", "to"].some((k) => param(sp, k));
 
   const qs = (extra: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -33,13 +35,18 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="Feedback log" sub="Every vote, with the room conditions recorded at that moment.">
+      <PageHeader
+        eyebrow={{ icon: "message-square", text: "Facility management" }}
+        title="Feedback log"
+        sub="Every vote, with the room conditions recorded at that moment."
+      >
         <a className="btn btn-ghost" href={`/fm/feedback/export?${qs({})}`}>
+          <Icon name="download" size={15} />
           Download CSV
         </a>
       </PageHeader>
-      <section className="panel">
-        <form className="filters" method="get">
+      <section className="panel panel-flush">
+        <form className="toolbar" method="get">
           <label>
             Room
             <select name="room" defaultValue={filter.roomCode}>
@@ -52,7 +59,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
           <label>
             Vote
             <select name="vote" defaultValue={filter.voteRaw}>
-              <option value="">Any</option>
+              <option value="">Any vote</option>
               {THERMAL_VOTES.map((v) => (
                 <option key={v} value={v}>{THERMAL_VOTE_LABELS[v]}</option>
               ))}
@@ -66,8 +73,16 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
             To
             <input type="date" name="to" defaultValue={param(sp, "to")} />
           </label>
-          <button className="btn btn-primary" type="submit">Filter</button>
-          <Link href="/fm/feedback" className="btn btn-ghost">Clear</Link>
+          <button className="btn btn-primary" type="submit">
+            <Icon name="filter" size={15} />
+            Filter
+          </button>
+          {filtered && (
+            <Link href="/fm/feedback" className="btn btn-ghost">
+              <Icon name="x" size={15} />
+              Clear
+            </Link>
+          )}
         </form>
         <div className="table-wrap">
           <table>
@@ -77,35 +92,52 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
                 <th>Room</th>
                 <th>Vote</th>
                 <th>Comfortable</th>
-                <th>Temp</th>
-                <th>RH</th>
+                <th className="num">Temp</th>
+                <th className="num">RH</th>
                 <th>Comment</th>
-                <th>From</th>
+                <th>By</th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
-                <tr><td colSpan={8} className="empty">No feedback matches.</td></tr>
-              )}
+              {rows.length === 0 && <EmptyRow colSpan={8} icon="message-square">No feedback matches.</EmptyRow>}
               {rows.slice(0, PAGE).map((f) => (
                 <tr key={f.id}>
-                  <td className="small">{formatDateTime(f.createdAt)}</td>
-                  <td><strong>{f.roomCode}</strong></td>
+                  <td className="small nowrap muted">{formatDateTime(f.createdAt)}</td>
+                  <td className="cell-title">{f.roomCode}</td>
                   <td><VoteBadge vote={f.vote} /></td>
-                  <td>{f.comfortable ? "Yes" : "No"}</td>
-                  <td className="num">{f.temperatureC?.toFixed(1) ?? "—"}</td>
-                  <td className="num">{f.humidityPct?.toFixed(0) ?? "—"}</td>
-                  <td>{f.comment}</td>
-                  <td className="small muted">{f.userName ?? f.source}</td>
+                  <td>
+                    {f.comfortable ? <Badge tone="ok" icon="check">Yes</Badge> : <Badge icon="x">No</Badge>}
+                  </td>
+                  <td className="num">{f.temperatureC !== null ? `${f.temperatureC.toFixed(1)} °C` : "—"}</td>
+                  <td className="num">{f.humidityPct !== null ? `${f.humidityPct.toFixed(0)}%` : "—"}</td>
+                  <td className="small">{f.comment || <span className="faint">—</span>}</td>
+                  <td className="small muted nowrap">{f.userName ?? f.source}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="pager">
-          {page > 1 ? <Link href={`?${qs({ page: String(page - 1) })}`}>Newer</Link> : <span />}
-          {hasNext && <Link href={`?${qs({ page: String(page + 1) })}`}>Older</Link>}
-        </div>
+        {(page > 1 || hasNext) && (
+          <div className="pager">
+            {page > 1 ? (
+              <Link className="btn btn-ghost btn-sm" href={`?${qs({ page: String(page - 1) })}`}>
+                <Icon name="chevron-left" size={14} />
+                Newer
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span className="small muted">Page {page}</span>
+            {hasNext ? (
+              <Link className="btn btn-ghost btn-sm" href={`?${qs({ page: String(page + 1) })}`}>
+                Older
+                <Icon name="chevron-right" size={14} />
+              </Link>
+            ) : (
+              <span />
+            )}
+          </div>
+        )}
       </section>
     </>
   );

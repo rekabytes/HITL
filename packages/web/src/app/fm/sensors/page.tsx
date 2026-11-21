@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { asc, desc, eq } from "drizzle-orm";
 import { rooms, sensorReadings, sensorRooms, sensors } from "@hitl/db";
-import { PageHeader } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { Badge, EmptyRow, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDateTime, timeAgo } from "@/lib/time";
@@ -33,15 +34,22 @@ export default async function SensorsPage() {
   );
   const cutoff = Date.now() - ONLINE_MIN * 60_000;
 
+  const onlineCount = sensorRows.filter((s) => s.active && s.lastSeenAt && s.lastSeenAt.getTime() > cutoff).length;
+
   return (
     <>
       <PageHeader
+        eyebrow={{ icon: "cpu", text: "Facility management" }}
         title="Sensors"
         sub={`ESP32 and BME280 units. Online means a reading in the last ${ONLINE_MIN} minutes.${
           user.role === "admin" ? " Register and assign them under Rooms and sensors." : ""
         }`}
-      />
-      <section className="panel">
+      >
+        <Badge tone={onlineCount === sensorRows.length ? "ok" : "warn"} icon="wifi">
+          {onlineCount} of {sensorRows.length} online
+        </Badge>
+      </PageHeader>
+      <section className="panel panel-flush">
         <div className="table-wrap">
           <table>
             <thead>
@@ -49,14 +57,11 @@ export default async function SensorsPage() {
                 <th>Device</th>
                 <th>Rooms</th>
                 <th>Status</th>
-                <th>Last seen</th>
                 <th>Last reading</th>
               </tr>
             </thead>
             <tbody>
-              {sensorRows.length === 0 && (
-                <tr><td colSpan={5} className="empty">No sensors registered.</td></tr>
-              )}
+              {sensorRows.length === 0 && <EmptyRow colSpan={4} icon="cpu">No sensors registered.</EmptyRow>}
               {sensorRows.map((s, i) => {
                 const online = !!s.lastSeenAt && s.lastSeenAt.getTime() > cutoff;
                 const codes = links.filter((l) => l.sensorId === s.id).map((l) => l.code);
@@ -64,28 +69,49 @@ export default async function SensorsPage() {
                 return (
                   <tr key={s.id}>
                     <td>
-                      <strong>{s.deviceId}</strong>
-                      {(s.label || s.firmwareVersion) && (
-                        <div className="small muted">
-                          {[s.label, s.firmwareVersion && `firmware ${s.firmwareVersion}`].filter(Boolean).join(" · ")}
+                      <div style={{ display: "flex", gap: "0.65rem", alignItems: "center" }}>
+                        <span className="stat-icon" style={{ width: 34, height: 34 }}>
+                          <Icon name="cpu" size={16} />
+                        </span>
+                        <div>
+                          <div className="cell-title">{s.deviceId}</div>
+                          <div className="cell-sub">
+                            {[s.label, s.firmwareVersion && `firmware ${s.firmwareVersion}`].filter(Boolean).join(" · ") || "No details"}
+                          </div>
                         </div>
+                      </div>
+                    </td>
+                    <td>
+                      {codes.length ? (
+                        <div className="votes">
+                          {codes.map((c) => (
+                            <Badge key={c} icon="map-pin">{c}</Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="faint small">Not assigned</span>
                       )}
                     </td>
-                    <td>{codes.length ? codes.join(", ") : <span className="muted">not assigned</span>}</td>
                     <td>
                       {!s.active ? (
-                        <span className="badge">turned off</span>
+                        <Badge dot>Off</Badge>
                       ) : online ? (
-                        <span className="badge badge-ok">online</span>
+                        <Badge tone="ok" dot>Online</Badge>
                       ) : (
-                        <span className="badge badge-danger">offline</span>
+                        <Badge tone="danger" dot>Offline</Badge>
                       )}
+                      <div className="cell-sub" title={formatDateTime(s.lastSeenAt)}>{timeAgo(s.lastSeenAt)}</div>
                     </td>
-                    <td className="small" title={formatDateTime(s.lastSeenAt)}>{timeAgo(s.lastSeenAt)}</td>
                     <td className="small">
-                      {l
-                        ? `${l.temperatureC.toFixed(1)} °C, ${l.humidityPct.toFixed(0)}% RH${l.pressureHpa ? `, ${l.pressureHpa.toFixed(0)} hPa` : ""}`
-                        : "—"}
+                      {l ? (
+                        <div style={{ display: "flex", gap: "0.85rem", flexWrap: "wrap" }}>
+                          <span className="nowrap"><Icon name="thermometer" size={13} className="faint" /> {l.temperatureC.toFixed(1)} °C</span>
+                          <span className="nowrap"><Icon name="droplet" size={13} className="faint" /> {l.humidityPct.toFixed(0)}%</span>
+                          {l.pressureHpa && <span className="nowrap"><Icon name="wind" size={13} className="faint" /> {l.pressureHpa.toFixed(0)} hPa</span>}
+                        </div>
+                      ) : (
+                        <span className="faint">—</span>
+                      )}
                     </td>
                   </tr>
                 );

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { and, count, gt, ne } from "drizzle-orm";
 import { alerts, feedback } from "@hitl/db";
 import { LiveRooms, type LiveRoom } from "@/components/LiveRooms";
-import { PageHeader } from "@/components/Shell";
+import { PageHeader, Stat } from "@/components/ui";
 import { checkOfflineSensors, escalateStaleAlerts } from "@/lib/alerts";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -45,29 +45,22 @@ export default async function FmDashboard() {
 
   return (
     <>
-      <PageHeader title="Dashboard" sub="Live room conditions next to what occupants are saying." />
+      <PageHeader
+        eyebrow={{ icon: "grid", text: "Facility management" }}
+        title="Dashboard"
+        sub="Live room conditions next to what occupants are saying."
+      />
       <div className="stats">
-        <div className="stat">
-          <div className="label">Rooms reporting</div>
-          <div className="value">{live.length} / {statuses.length}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Avg temperature</div>
-          <div className="value">{avg((s) => s.latest!.temperatureC)} °C</div>
-        </div>
-        <div className="stat">
-          <div className="label">Avg humidity</div>
-          <div className="value">{avg((s) => s.latest!.humidityPct)}%</div>
-        </div>
-        <div className="stat">
-          <div className="label">Votes, last 24 h</div>
-          <div className="value">{total24}</div>
-          <div className="hint">{total24 ? `${Math.round(((total24 - unhappy) / total24) * 100)}% said perfect` : "no votes yet"}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Open alerts</div>
-          <div className="value">{openTotal}</div>
-        </div>
+        <Stat icon="wifi" label="Rooms reporting" value={live.length} unit={`/ ${statuses.length}`} />
+        <Stat icon="thermometer" label="Avg temperature" value={avg((s) => s.latest!.temperatureC)} unit="°C" />
+        <Stat icon="droplet" label="Avg humidity" value={avg((s) => s.latest!.humidityPct)} unit="%" tone="cold" />
+        <Stat
+          icon="message-square"
+          label="Votes, last 24 h"
+          value={total24}
+          hint={total24 ? `${Math.round(((total24 - unhappy) / total24) * 100)}% said perfect` : "No votes yet"}
+        />
+        <Stat icon="bell" label="Open alerts" value={openTotal} tone={openTotal ? "danger" : undefined} />
       </div>
       <LiveRooms initial={initial} />
     </>

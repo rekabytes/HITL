@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { count, desc, isNotNull } from "drizzle-orm";
 import { feedback, modelRuns } from "@hitl/db";
 import { ActionForm } from "@/components/ActionForm";
-import { PageHeader } from "@/components/Shell";
+import { Badge, EmptyRow, PageHeader, PanelHead, Stat } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { mlHealth } from "@/lib/ml";
@@ -11,12 +11,7 @@ import { retrainAction } from "./actions";
 
 export const metadata: Metadata = { title: "Comfort model" };
 
-const STATUS_BADGE: Record<string, string> = {
-  succeeded: "badge-ok",
-  skipped: "badge-warn",
-  failed: "badge-danger",
-  running: "",
-};
+const STATUS_TONE = { succeeded: "ok", skipped: "warn", failed: "danger", running: "neutral" } as const;
 
 function pct(v: unknown) {
   return typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "—";
@@ -30,62 +25,62 @@ export default async function ModelPage() {
     db().select({ n: count() }).from(feedback),
     mlHealth(),
   ]);
+  const best = runs.find((r) => r.status === "succeeded");
 
   return (
     <>
       <PageHeader
+        eyebrow={{ icon: "shield", text: "Administration" }}
         title="Comfort model"
         sub="A random forest that learns, from occupant votes and the room conditions at that moment, how likely people are to call a room comfortable."
-      />
-      <div className="grid grid-2">
-        <section className="panel">
-          <h2>Training data</h2>
-          <p>
-            <strong>{labelled?.n ?? 0}</strong> of {allVotes?.n ?? 0} votes have a temperature and humidity reading
-            attached and can be used for training.
-          </p>
-          <p className="small muted">
-            A vote gets a reading attached when the room had a sensor reading in the 30 minutes before it. The model
-            retrains by itself after every 50 new labelled votes. It needs at least 30 votes in two or more classes; until
-            then the service answers with a simple rule-based estimate.
-          </p>
-          <ActionForm action={retrainAction} submitLabel="Retrain now" />
-        </section>
-        <section className="panel">
-          <h2>Service</h2>
-          <p>
-            {ml.ok ? <span className="badge badge-ok">up</span> : <span className="badge badge-danger">unreachable</span>}{" "}
-            {ml.ok && (
-              <>
-                serving <code>{ml.model}</code>
-                {ml.trainedAt && <>, trained {formatDateTime(ml.trainedAt)}</>}
-              </>
-            )}
-          </p>
-        </section>
+      >
+        <ActionForm action={retrainAction} submitLabel="Retrain now" icon="refresh-cw" className="form-inline" />
+      </PageHeader>
+
+      <div className="stats">
+        <Stat icon="database" label="Labelled votes" value={labelled?.n ?? 0} unit={`/ ${allVotes?.n ?? 0}`} hint="Votes with a reading attached" />
+        <Stat icon="check-circle" label="Accuracy" value={pct(best?.metrics?.accuracy)} hint="On held-out votes" />
+        <Stat icon="bar-chart-2" label="Macro F1" value={pct(best?.metrics?.f1_macro)} hint="Balanced across vote types" />
+        <Stat
+          icon="server"
+          label="Service"
+          value={ml.ok ? (ml.model === "random_forest" ? "Trained" : "Rules") : "Down"}
+          tone={ml.ok ? undefined : "danger"}
+          hint={ml.trainedAt ? `Trained ${formatDateTime(ml.trainedAt)}` : "Not trained yet"}
+        />
       </div>
+
       <section className="panel">
-        <h2>Runs</h2>
+        <PanelHead icon="info" title="How it learns" />
+        <p className="small muted" style={{ lineHeight: 1.6, maxWidth: 820 }}>
+          A vote gets a reading attached when the room had a sensor reading in the 30 minutes before it. The model retrains by
+          itself after every 50 new labelled votes. It needs at least 30 votes in two or more classes; until then the service
+          answers with a simple rule-based estimate.
+        </p>
+      </section>
+
+      <section className="panel panel-flush">
+        <PanelHead icon="activity" title="Runs" count={runs.length} />
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Started</th>
                 <th>Status</th>
-                <th>Votes</th>
-                <th>Accuracy</th>
-                <th>Macro F1</th>
+                <th className="num">Votes</th>
+                <th className="num">Accuracy</th>
+                <th className="num">Macro F1</th>
                 <th>Note</th>
               </tr>
             </thead>
             <tbody>
-              {runs.length === 0 && (
-                <tr><td colSpan={6} className="empty">No runs yet.</td></tr>
-              )}
+              {runs.length === 0 && <EmptyRow colSpan={6} icon="activity">No runs yet.</EmptyRow>}
               {runs.map((r) => (
                 <tr key={r.id}>
-                  <td className="small">{formatDateTime(r.startedAt)}</td>
-                  <td><span className={`badge ${STATUS_BADGE[r.status] ?? ""}`}>{r.status}</span></td>
+                  <td className="small nowrap">{formatDateTime(r.startedAt)}</td>
+                  <td>
+                    <Badge tone={STATUS_TONE[r.status]} dot>{r.status}</Badge>
+                  </td>
                   <td className="num">{r.trainingRows}</td>
                   <td className="num">{pct(r.metrics?.accuracy)}</td>
                   <td className="num">{pct(r.metrics?.f1_macro)}</td>

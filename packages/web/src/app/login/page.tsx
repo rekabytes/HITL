@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionForm } from "@/components/ActionForm";
+import { AuthCard } from "@/components/AuthCard";
+import { Icon } from "@/components/Icon";
 import { currentUser } from "@/lib/auth";
 import { adminExists, loginAction } from "./actions";
 
@@ -13,29 +15,26 @@ export default async function LoginPage() {
   const firstRun = !(await adminExists());
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <div>
-          <h1>Sign in</h1>
-          <p className="sub">HITL Smart Building portal for admins and facility managers.</p>
-        </div>
-        {firstRun ? (
-          <p className="msg">
+    <AuthCard title="Sign in" sub="For admins and facility managers.">
+      {firstRun ? (
+        <div className="notice">
+          <Icon name="info" size={16} />
+          <span>
             No admin account yet. <Link href="/setup">Create the first admin</Link>.
-          </p>
-        ) : (
-          <ActionForm action={loginAction} submitLabel="Sign in">
-            <label>
-              Email
-              <input name="email" type="email" autoComplete="username" required />
-            </label>
-            <label>
-              Password
-              <input name="password" type="password" autoComplete="current-password" required />
-            </label>
-          </ActionForm>
-        )}
-      </div>
-    </div>
+          </span>
+        </div>
+      ) : (
+        <ActionForm action={loginAction} submitLabel="Sign in" icon="log-in" block>
+          <label>
+            Email
+            <input name="email" type="email" autoComplete="username" placeholder="you@example.edu.my" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autoComplete="current-password" required />
+          </label>
+        </ActionForm>
+      )}
+    </AuthCard>
   );
 }

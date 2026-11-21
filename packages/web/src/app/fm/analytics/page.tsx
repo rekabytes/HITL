@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { sql, type SQL } from "drizzle-orm";
 import { TrendChart, VotesChart, type TrendPoint, type VotePoint } from "@/components/Charts";
-import { PageHeader } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { PageHeader, PanelHead } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
@@ -73,38 +74,40 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PageHeader title="Analytics" sub={room ? `${room.code} · ${room.name}` : "All rooms"} />
-      <form className="filters" method="get">
-        <label>
-          Room
-          <select name="room" defaultValue={roomCode}>
+      <PageHeader
+        eyebrow={{ icon: "bar-chart-2", text: "Facility management" }}
+        title="Analytics"
+        sub={room ? `${room.code} · ${room.name}` : "All rooms"}
+      >
+        <form className="form-inline" method="get">
+          <select name="room" defaultValue={roomCode} aria-label="Room">
             <option value="">All rooms</option>
             {roomRows.map((r) => (
               <option key={r.id} value={r.code}>{r.code}</option>
             ))}
           </select>
-        </label>
-        <label>
-          Range
-          <select name="range" defaultValue={rangeKey}>
+          <select name="range" defaultValue={rangeKey} aria-label="Range">
             <option value="24h">Last 24 hours</option>
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
           </select>
-        </label>
-        <button className="btn btn-primary" type="submit">Show</button>
-      </form>
+          <button className="btn btn-primary" type="submit">
+            <Icon name="filter" size={15} />
+            Show
+          </button>
+        </form>
+      </PageHeader>
       <section className="panel">
-        <h2>Temperature and humidity</h2>
+        <PanelHead icon="thermometer" title="Temperature and humidity" />
         <TrendChart data={trendData} />
       </section>
-      <div className="grid grid-2" style={{ marginTop: "1.25rem" }}>
+      <div className="grid grid-2 mt">
         <section className="panel">
-          <h2>Votes over time</h2>
+          <PanelHead icon="message-square" title="Votes over time" />
           <VotesChart data={toVotes(votes)} />
         </section>
         <section className="panel">
-          <h2>Votes by room temperature</h2>
+          <PanelHead icon="bar-chart-2" title="Votes by room temperature" />
           <VotesChart data={toVotes(bands)} empty="No votes with a reading attached in this range." />
         </section>
       </div>

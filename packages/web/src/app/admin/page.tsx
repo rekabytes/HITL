@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { count, desc, eq, gt, ne } from "drizzle-orm";
 import { alerts, feedback, modelRuns, rooms, sensors, users } from "@hitl/db";
-import { PageHeader } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { Badge, PageHeader, PanelHead, Stat } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { mlHealth } from "@/lib/ml";
@@ -25,51 +26,70 @@ export default async function AdminOverview() {
     mlHealth(),
   ]);
   const role = (r: string) => byRole.find((x) => x.role === r)?.n ?? 0;
+  const open = openAlerts?.n ?? 0;
 
   return (
     <>
-      <PageHeader title="Admin overview" sub="Accounts, rooms, sensors and the comfort model." />
+      <PageHeader
+        eyebrow={{ icon: "shield", text: "Administration" }}
+        title="Overview"
+        sub="Accounts, rooms, sensors and the comfort model at a glance."
+      />
       <div className="stats">
-        <Stat label="Admins" value={role("admin")} />
-        <Stat label="Facility managers" value={role("facility_manager")} />
-        <Stat label="Occupants" value={role("occupant")} />
-        <Stat label="Rooms" value={roomCount?.n ?? 0} />
-        <Stat label="Sensors online" value={`${sensorsOnline?.n ?? 0} / ${sensorCount?.n ?? 0}`} hint="seen in the last 10 min" />
-        <Stat label="Votes, last 24 h" value={votes24h?.n ?? 0} />
-        <Stat label="Open alerts" value={openAlerts?.n ?? 0} />
+        <Stat icon="shield" label="Admins" value={role("admin")} />
+        <Stat icon="user-check" label="Facility managers" value={role("facility_manager")} />
+        <Stat icon="users" label="Occupants" value={role("occupant")} />
+        <Stat icon="home" label="Rooms" value={roomCount?.n ?? 0} />
+        <Stat icon="cpu" label="Sensors online" value={sensorsOnline?.n ?? 0} unit={`/ ${sensorCount?.n ?? 0}`} hint="Seen in the last 10 min" />
+        <Stat icon="message-square" label="Votes, last 24 h" value={votes24h?.n ?? 0} />
+        <Stat icon="bell" label="Open alerts" value={open} tone={open ? "danger" : undefined} />
       </div>
       <div className="grid grid-2">
         <section className="panel">
-          <h2>Comfort model</h2>
-          <p className="small">
-            Service: {ml.ok ? <span className="badge badge-ok">up</span> : <span className="badge badge-danger">unreachable</span>}{" "}
-            {ml.ok && <>model <code>{ml.model}</code></>}
-          </p>
-          <p className="small muted">
-            Last run: {lastRun ? `${lastRun.status}, ${formatDateTime(lastRun.startedAt)}, ${lastRun.trainingRows} votes` : "never"}
-          </p>
-          <Link href="/admin/model">Open model page</Link>
+          <PanelHead icon="trending-up" title="Comfort model">
+            {ml.ok ? (
+              <Badge tone="ok" dot>Service up</Badge>
+            ) : (
+              <Badge tone="danger" dot>Unreachable</Badge>
+            )}
+          </PanelHead>
+          <dl className="kv">
+            <dt>Serving</dt>
+            <dd>{ml.ok ? <code>{ml.model}</code> : "—"}</dd>
+            <dt>Last run</dt>
+            <dd>{lastRun ? `${lastRun.status}, ${formatDateTime(lastRun.startedAt)}` : "Never"}</dd>
+            <dt>Votes used</dt>
+            <dd>{lastRun?.trainingRows ?? 0}</dd>
+          </dl>
+          <Link href="/admin/model" className="btn btn-ghost btn-sm mt">
+            Open model page
+            <Icon name="chevron-right" size={14} />
+          </Link>
         </section>
         <section className="panel">
-          <h2>Getting started</h2>
-          <ol className="list small">
-            <li><Link href="/admin/rooms">Add a building and its rooms</Link>. Each room code goes into a QR code on the door.</li>
-            <li>Register each ESP32 under the room it sits in and flash the device key onto it.</li>
-            <li><Link href="/admin/users">Create facility manager accounts</Link>.</li>
-            <li><Link href="/admin/pics">Set a person in charge</Link> per room to get alert emails.</li>
+          <PanelHead icon="check-circle" title="Getting started" />
+          <ol className="steps">
+            <li>
+              <span>
+                <Link href="/admin/rooms">Add a building and its rooms</Link>. Each room code goes into a QR code on the door.
+              </span>
+            </li>
+            <li>
+              <span>Register each ESP32 under the room it sits in and flash the device key onto it.</span>
+            </li>
+            <li>
+              <span>
+                <Link href="/admin/users">Create facility manager accounts</Link>.
+              </span>
+            </li>
+            <li>
+              <span>
+                <Link href="/admin/pics">Set a person in charge</Link> per room to get alert emails.
+              </span>
+            </li>
           </ol>
         </section>
       </div>
     </>
-  );
-}
-
-function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
-  return (
-    <div className="stat">
-      <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {hint && <div className="hint">{hint}</div>}
-    </div>
   );
 }

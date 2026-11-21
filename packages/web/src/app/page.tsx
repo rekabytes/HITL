@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { logoutAction } from "./actions";
+import { AuthCard } from "@/components/AuthCard";
+import { Icon } from "@/components/Icon";
 import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -11,18 +13,16 @@ export default async function Home() {
   if (user.role === "facility_manager") redirect("/fm");
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <h1>Hi {user.name}</h1>
-        <p className="sub">
-          Occupant accounts give feedback from the mobile app. This portal is for admins and facility managers.
-        </p>
-        <form action={logoutAction}>
-          <button type="submit" className="btn btn-primary btn-block">
-            Sign out
-          </button>
-        </form>
-      </div>
-    </div>
+    <AuthCard
+      title={`Hi ${user.name}`}
+      sub="Occupant accounts give feedback from the mobile app. This portal is for admins and facility managers."
+    >
+      <form action={logoutAction}>
+        <button type="submit" className="btn btn-primary btn-block">
+          <Icon name="log-out" size={15} />
+          Sign out
+        </button>
+      </form>
+    </AuthCard>
   );
 }

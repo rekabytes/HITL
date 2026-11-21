@@ -3,7 +3,9 @@ import { desc, eq } from "drizzle-orm";
 import { actions, rooms, users } from "@hitl/db";
 import { energyEstimate, THERMAL_VOTE_LABELS } from "@hitl/shared";
 import { ActionForm } from "@/components/ActionForm";
-import { PageHeader } from "@/components/Shell";
+import { Icon, type IconName } from "@/components/Icon";
+import { Badge, Empty, PageHeader, PanelHead } from "@/components/ui";
+import { VoteBadge } from "@/components/VoteBadge";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
@@ -14,10 +16,10 @@ import { logActionAction } from "../actions";
 export const metadata: Metadata = { title: "Recommendations" };
 
 const LEVEL = {
-  ok: { cls: "badge-ok", text: "OK" },
-  advice: { cls: "badge-warn", text: "Advice" },
-  action: { cls: "badge-danger", text: "Act now" },
-} as const;
+  ok: { tone: "ok", text: "All good", icon: "check-circle" },
+  advice: { tone: "warn", text: "Advice", icon: "info" },
+  action: { tone: "danger", text: "Act now", icon: "alert-triangle" },
+} as const satisfies Record<string, { tone: "ok" | "warn" | "danger"; text: string; icon: IconName }>;
 
 export default async function RecommendationsPage() {
   await requireStaff();
@@ -40,74 +42,117 @@ export default async function RecommendationsPage() {
   return (
     <>
       <PageHeader
+        eyebrow={{ icon: "zap", text: "Facility management" }}
         title="Recommendations"
         sub="Advice combines the comfort band with recent votes. The model score is the predicted chance that an occupant votes perfect."
       />
+      {statuses.length === 0 && (
+        <section className="panel">
+          <Empty icon="home">No rooms yet.</Empty>
+        </section>
+      )}
       <div className="grid grid-2">
-        {sorted.map((s) => (
-          <section key={s.room.id} className="panel">
-            <div className="page-header" style={{ marginBottom: "0.75rem" }}>
-              <div>
-                <h2 style={{ marginBottom: 0 }}>{s.room.code}</h2>
-                <p className="sub small">
-                  {s.room.name} · {s.room.buildingName}
-                </p>
+        {sorted.map((s) => {
+          const level = s.recommendation ? LEVEL[s.recommendation.level] : null;
+          return (
+            <section key={s.room.id} className="panel" style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+              <div className="panel-head" style={{ marginBottom: 0 }}>
+                <div>
+                  <h2>{s.room.code}</h2>
+                  <div className="cell-sub" style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    <Icon name="map-pin" size={12} />
+                    {s.room.name} · {s.room.buildingName}
+                  </div>
+                </div>
+                {level ? (
+                  <Badge tone={level.tone} icon={level.icon}>{level.text}</Badge>
+                ) : (
+                  <Badge icon="wifi-off">No recent data</Badge>
+                )}
               </div>
-              {s.recommendation ? (
-                <span className={`badge ${LEVEL[s.recommendation.level].cls}`}>{LEVEL[s.recommendation.level].text}</span>
+
+              {s.fresh && s.latest ? (
+                <>
+                  <div className="metrics" style={{ margin: 0 }}>
+                    <div className="metric">
+                      <div className="m-label"><Icon name="thermometer" size={12} />Temperature</div>
+                      <div className="m-value">{s.latest.temperatureC.toFixed(1)}<small>°C</small></div>
+                    </div>
+                    <div className="metric">
+                      <div className="m-label"><Icon name="droplet" size={12} />Humidity</div>
+                      <div className="m-value">{s.latest.humidityPct.toFixed(0)}<small>%</small></div>
+                    </div>
+                  </div>
+                  <div className="votes" title="Votes in the last 30 minutes">
+                    <VoteBadge vote="too_cold" count={s.tally.tooCold} />
+                    <VoteBadge vote="perfect" count={s.tally.perfect} />
+                    <VoteBadge vote="too_hot" count={s.tally.tooHot} />
+                    <span className="tiny faint" style={{ alignSelf: "center" }}>last 30 min · read {timeAgo(s.latest.recordedAt)}</span>
+                  </div>
+                  <ul className="list">
+                    {s.recommendation!.items.map((item) => (
+                      <li key={item}>
+                        <Icon name="chevron-right" size={14} />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <dl className="kv">
+                    <dt>Energy</dt>
+                    <dd><EnergyLine temperatureC={s.latest.temperatureC} /></dd>
+                    <dt>Model</dt>
+                    <dd>
+                      {s.prediction ? (
+                        <>
+                          {Math.round(s.prediction.comfortScore * 100)}% comfort, likely &ldquo;{THERMAL_VOTE_LABELS[s.prediction.predictedVote]}&rdquo;
+                          <span className="faint"> · {s.prediction.model === "random_forest" ? "trained" : "rule estimate"}</span>
+                        </>
+                      ) : (
+                        <span className="faint">Unavailable right now</span>
+                      )}
+                    </dd>
+                  </dl>
+                </>
               ) : (
-                <span className="badge">no recent data</span>
+                <Empty icon="wifi-off">No reading in the last 30 minutes. Check the sensor.</Empty>
               )}
-            </div>
-            {s.fresh && s.latest ? (
-              <>
-                <p className="small">
-                  <strong>{s.latest.temperatureC.toFixed(1)} °C</strong>, {s.latest.humidityPct.toFixed(0)}% RH,{" "}
-                  {timeAgo(s.latest.recordedAt)}. Votes in the last 30 min: {s.tally.tooCold} cold, {s.tally.perfect} perfect,{" "}
-                  {s.tally.tooHot} hot.
-                </p>
-                <ul className="list">
-                  {s.recommendation!.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <EnergyLine temperatureC={s.latest.temperatureC} />
-                <p className="small muted">
-                  {s.prediction
-                    ? `Model (${s.prediction.model === "random_forest" ? "trained" : "rule estimate"}): ${Math.round(
-                        s.prediction.comfortScore * 100,
-                      )}% comfort, most likely vote "${THERMAL_VOTE_LABELS[s.prediction.predictedVote]}".`
-                    : "Model unavailable right now."}
-                </p>
-              </>
-            ) : (
-              <p className="muted small">No reading in the last 30 minutes. Check the sensor.</p>
-            )}
-            <ActionForm action={logActionAction} submitLabel="Log action" variant="ghost">
-              <input type="hidden" name="roomId" value={s.room.id} />
-              <textarea name="note" placeholder="What did you do? For example: set AC to 23 °C." maxLength={2000} />
-            </ActionForm>
-          </section>
-        ))}
+
+              <ActionForm action={logActionAction} submitLabel="Log action" icon="edit-3" variant="ghost" size="sm">
+                <input type="hidden" name="roomId" value={s.room.id} />
+                <textarea name="note" placeholder="What did you do? For example: set AC to 23 °C." maxLength={2000} />
+              </ActionForm>
+            </section>
+          );
+        })}
       </div>
-      {statuses.length === 0 && <p className="panel empty">No rooms yet.</p>}
-      <section className="panel" style={{ marginTop: "1.25rem" }}>
-        <h2>Recent actions</h2>
+
+      <section className="panel panel-flush mt">
+        <PanelHead icon="edit-3" title="Recent actions" count={recent.length} />
         {recent.length === 0 ? (
-          <p className="empty">Nothing logged yet.</p>
+          <Empty icon="edit-3">Nothing logged yet.</Empty>
         ) : (
-          <table>
-            <tbody>
-              {recent.map((a) => (
-                <tr key={a.id}>
-                  <td className="small" style={{ whiteSpace: "nowrap" }}>{formatDateTime(a.createdAt)}</td>
-                  <td><strong>{a.code ?? "—"}</strong></td>
-                  <td>{a.note}</td>
-                  <td className="small muted">{a.by ?? ""}</td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Room</th>
+                  <th>What was done</th>
+                  <th>By</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {recent.map((a) => (
+                  <tr key={a.id}>
+                    <td className="small nowrap muted">{formatDateTime(a.createdAt)}</td>
+                    <td className="cell-title">{a.code ?? "—"}</td>
+                    <td>{a.note}</td>
+                    <td className="small muted nowrap">{a.by ?? ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </>
@@ -116,17 +161,13 @@ export default async function RecommendationsPage() {
 
 function EnergyLine({ temperatureC }: { temperatureC: number }) {
   const e = energyEstimate(temperatureC, env.bands);
+  if (e.status === "ok") return <Badge tone="ok" icon="check">No overcooling</Badge>;
   return (
-    <p className="small">
-      Energy:{" "}
-      {e.status === "ok" ? (
-        <span className="badge badge-ok">no overcooling</span>
-      ) : (
-        <>
-          <span className="badge badge-warn">overcooling</span> {e.degreesBelow} °C below the band, about {e.extraCoolingPct}% extra
-          cooling (score {e.score.toFixed(2)})
-        </>
-      )}
-    </p>
+    <>
+      <Badge tone="warn" icon="wind">Overcooling</Badge>{" "}
+      <span className="small">
+        {e.degreesBelow} °C below the band, about {e.extraCoolingPct}% extra cooling
+      </span>
+    </>
   );
 }
