@@ -30,7 +30,7 @@ export default async function ModelPage() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "shield", text: "Administration" }}
+        eyebrow={{ icon: "trending-up", text: "Insights" }}
         title="Comfort model"
         sub="A random forest that learns, from occupant votes and the room conditions at that moment, how likely people are to call a room comfortable."
       >

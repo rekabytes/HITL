@@ -47,7 +47,7 @@ export default async function AlertsPage() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "bell", text: "Facility management" }}
+        eyebrow={{ icon: "bell", text: "Monitor" }}
         title="Alerts"
         sub={`Raised from readings, votes and quiet sensors, or reported by staff. The person in charge is emailed when an alert opens, and again as an escalation if nobody acknowledges it within ${env.escalateAfterMin} minutes.`}
       />

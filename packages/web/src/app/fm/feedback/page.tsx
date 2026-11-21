@@ -36,7 +36,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "message-square", text: "Facility management" }}
+        eyebrow={{ icon: "message-square", text: "Insights" }}
         title="Feedback log"
         sub="Every vote, with the room conditions recorded at that moment."
       >

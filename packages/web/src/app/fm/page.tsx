@@ -50,7 +50,7 @@ export default async function FmDashboard() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "grid", text: "Facility management" }}
+        eyebrow={{ icon: "grid", text: "Overview" }}
         title="Dashboard"
         sub="Live room conditions next to what occupants are saying."
       />

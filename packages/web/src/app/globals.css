@@ -378,3 +378,14 @@ details.danger-zone .dz-body { margin-top: 0.5rem; display: grid; gap: 0.5rem; m
 }
 .panel-head h2 .ai-mark .icon { color: #fff; }
 .sensor-avg { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: auto; padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--brand-50); color: var(--brand-700); font-size: 0.72rem; font-weight: 600; }
+
+/* ---------- grouped navigation ---------- */
+.nav-groups { display: flex; flex-direction: column; gap: 1.15rem; }
+.nav-groups .nav + .nav { padding-top: 1.05rem; border-top: 1px solid rgb(255 255 255 / 6%); }
+.nav-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-badge {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center;
+  font-size: 0.7rem; font-weight: 700; background: rgb(255 255 255 / 12%); color: #fff; font-variant-numeric: tabular-nums;
+}
+.nav-badge.urgent { background: #e0533d; color: #fff; box-shadow: 0 0 0 2px rgb(224 83 61 / 25%); }
+.nav-link.active .nav-badge:not(.urgent) { background: rgb(79 224 170 / 25%); color: #d9fff0; }

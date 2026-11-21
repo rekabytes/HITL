@@ -18,7 +18,7 @@ export default async function PicsPage() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "shield", text: "Administration" }}
+        eyebrow={{ icon: "shield", text: "Setup" }}
         title="Persons in charge"
         sub="One contact per room. They are emailed when an alert opens there, and again if it is escalated."
       />

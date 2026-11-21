@@ -9,8 +9,7 @@ export const dynamic = "force-dynamic";
 /** Sends each role to its home. Occupants use the mobile app, so they get a short note. */
 export default async function Home() {
   const user = await requireUser();
-  if (user.role === "admin") redirect("/admin");
-  if (user.role === "facility_manager") redirect("/fm");
+  if (user.role === "admin" || user.role === "facility_manager") redirect("/fm");
 
   return (
     <AuthCard

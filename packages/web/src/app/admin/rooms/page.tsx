@@ -45,7 +45,7 @@ export default async function RoomsPage() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "shield", text: "Administration" }}
+        eyebrow={{ icon: "shield", text: "Setup" }}
         title="Rooms and sensors"
         sub="Room codes go into the QR codes occupants scan. A sensor can report for one room or several."
       />

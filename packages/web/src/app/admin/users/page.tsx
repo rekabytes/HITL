@@ -23,7 +23,7 @@ export default async function UsersPage() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "shield", text: "Administration" }}
+        eyebrow={{ icon: "shield", text: "Setup" }}
         title="Users"
         sub="Staff accounts are made here. Occupants sign up from the mobile app."
       />

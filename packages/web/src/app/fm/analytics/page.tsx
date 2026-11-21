@@ -75,7 +75,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "bar-chart-2", text: "Facility management" }}
+        eyebrow={{ icon: "bar-chart-2", text: "Insights" }}
         title="Analytics"
         sub={room ? `${room.code} · ${room.name}` : "All rooms"}
       >

@@ -7,7 +7,7 @@ import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDateTime, timeAgo } from "@/lib/time";
 
-export const metadata: Metadata = { title: "Sensors" };
+export const metadata: Metadata = { title: "Sensor status" };
 
 const ONLINE_MIN = 10;
 
@@ -39,10 +39,10 @@ export default async function SensorsPage() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "cpu", text: "Facility management" }}
-        title="Sensors"
+        eyebrow={{ icon: "cpu", text: "Monitor" }}
+        title="Sensor status"
         sub={`ESP32 and BME280 units. Online means a reading in the last ${ONLINE_MIN} minutes.${
-          user.role === "admin" ? " Register and assign them under Rooms and sensors." : ""
+          user.role === "admin" ? " Register and assign them under Setup, Rooms and sensors." : ""
         }`}
       >
         <Badge tone={onlineCount === sensorRows.length ? "ok" : "warn"} icon="wifi">

@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { mlHealth } from "@/lib/ml";
 import { formatDateTime } from "@/lib/time";
 
-export const metadata: Metadata = { title: "Admin" };
+export const metadata: Metadata = { title: "System overview" };
 
 export default async function AdminOverview() {
   await requireAdmin();
@@ -31,8 +31,8 @@ export default async function AdminOverview() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "shield", text: "Administration" }}
-        title="Overview"
+        eyebrow={{ icon: "shield", text: "Setup" }}
+        title="System overview"
         sub="Accounts, rooms, sensors and the comfort model at a glance."
       />
       <div className="stats">

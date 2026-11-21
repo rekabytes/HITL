@@ -2,56 +2,94 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { logoutAction } from "@/app/actions";
 import type { SessionUser } from "@/lib/auth";
+import type { NavCounts } from "@/lib/nav";
 import { Icon, type IconName } from "./Icon";
 import { NavLink } from "./NavLink";
 import { Brand, initials } from "./ui";
 
 export { PageHeader } from "./ui";
 
-const FM_LINKS: { href: string; label: string; icon: IconName }[] = [
-  { href: "/fm", label: "Dashboard", icon: "grid" },
-  { href: "/fm/feedback", label: "Feedback log", icon: "message-square" },
-  { href: "/fm/analytics", label: "Analytics", icon: "bar-chart-2" },
-  { href: "/fm/recommendations", label: "Recommendations", icon: "zap" },
-  { href: "/fm/alerts", label: "Alerts", icon: "bell" },
-  { href: "/fm/sensors", label: "Sensors", icon: "cpu" },
-];
+interface NavItem {
+  href: string;
+  label: string;
+  icon: IconName;
+  /** Which live count to show next to the link. */
+  count?: keyof NavCounts;
+  adminOnly?: boolean;
+}
 
-const ADMIN_LINKS: { href: string; label: string; icon: IconName }[] = [
-  { href: "/admin", label: "Overview", icon: "layout" },
-  { href: "/admin/users", label: "Users", icon: "users" },
-  { href: "/admin/rooms", label: "Rooms and sensors", icon: "home" },
-  { href: "/admin/pics", label: "Persons in charge", icon: "user-check" },
-  { href: "/admin/model", label: "Comfort model", icon: "trending-up" },
+interface NavGroup {
+  title?: string;
+  adminOnly?: boolean;
+  items: NavItem[];
+}
+
+/**
+ * Grouped by what people do, not by role: the dashboard first, then the
+ * pages that need action, then the pages for looking back, then setup.
+ */
+const NAV: NavGroup[] = [
+  { items: [{ href: "/fm", label: "Dashboard", icon: "grid" }] },
+  {
+    title: "Monitor",
+    items: [
+      { href: "/fm/alerts", label: "Alerts", icon: "bell", count: "alerts" },
+      { href: "/fm/recommendations", label: "Recommendations", icon: "zap", count: "suggestions" },
+      { href: "/fm/sensors", label: "Sensor status", icon: "wifi" },
+    ],
+  },
+  {
+    title: "Insights",
+    items: [
+      { href: "/fm/feedback", label: "Feedback log", icon: "message-square" },
+      { href: "/fm/analytics", label: "Analytics", icon: "bar-chart-2" },
+      { href: "/admin/model", label: "Comfort model", icon: "trending-up", adminOnly: true },
+    ],
+  },
+  {
+    title: "Setup",
+    adminOnly: true,
+    items: [
+      { href: "/admin/rooms", label: "Rooms and sensors", icon: "home" },
+      { href: "/admin/pics", label: "Persons in charge", icon: "user-check" },
+      { href: "/admin/users", label: "Users", icon: "users" },
+      { href: "/admin", label: "System overview", icon: "layout" },
+    ],
+  },
 ];
 
 const ROLE_LABEL = { admin: "Admin", facility_manager: "Facility manager", occupant: "Occupant" } as const;
 
-export function Shell({ user, children }: { user: SessionUser; children: ReactNode }) {
+export function Shell({ user, counts, children }: { user: SessionUser; counts: NavCounts; children: ReactNode }) {
+  const isAdmin = user.role === "admin";
+  const groups = NAV.filter((g) => isAdmin || !g.adminOnly)
+    .map((g) => ({ ...g, items: g.items.filter((i) => isAdmin || !i.adminOnly) }))
+    .filter((g) => g.items.length > 0);
+
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Link href="/" className="brand">
+        <Link href="/fm" className="brand">
           <Brand />
         </Link>
-        {user.role === "admin" && (
-          <nav className="nav" aria-label="Administration">
-            <p className="nav-title">Administration</p>
-            {ADMIN_LINKS.map((l) => (
-              <NavLink key={l.href} href={l.href} icon={l.icon}>
-                {l.label}
-              </NavLink>
-            ))}
-          </nav>
-        )}
-        <nav className="nav" aria-label="Facility management">
-          <p className="nav-title">Facility management</p>
-          {FM_LINKS.map((l) => (
-            <NavLink key={l.href} href={l.href} icon={l.icon}>
-              {l.label}
-            </NavLink>
+        <div className="nav-groups">
+          {groups.map((g, gi) => (
+            <nav key={g.title ?? gi} className="nav" aria-label={g.title ?? "Main"}>
+              {g.title && <p className="nav-title">{g.title}</p>}
+              {g.items.map((l) => (
+                <NavLink
+                  key={l.href}
+                  href={l.href}
+                  icon={l.icon}
+                  count={l.count ? counts[l.count] : undefined}
+                  urgent={l.count === "alerts"}
+                >
+                  {l.label}
+                </NavLink>
+              ))}
+            </nav>
           ))}
-        </nav>
+        </div>
         <div className="sidebar-foot">
           <div className="user-card">
             <span className="avatar" aria-hidden>

@@ -45,7 +45,7 @@ export default async function RecommendationsPage() {
   return (
     <>
       <PageHeader
-        eyebrow={{ icon: "zap", text: "Facility management" }}
+        eyebrow={{ icon: "zap", text: "Monitor" }}
         title="Recommendations"
         sub="Advice combines the comfort band with recent votes. The model score is the predicted chance that an occupant votes perfect."
       />
