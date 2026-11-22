@@ -1,5 +1,7 @@
 # API
 
+Production base URL: [https://hitl.reka-bytes.my](https://hitl.reka-bytes.my). For local development, use `http://localhost:3000`.
+
 All bodies are JSON. Errors look like `{"error": "message"}`, and invalid bodies return 422 with `details`.
 
 ## Sensors

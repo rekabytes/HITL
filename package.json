@@ -18,7 +18,6 @@
     "db:migrate": "pnpm --filter @hitl/db migrate",
     "db:studio": "pnpm --filter @hitl/db studio",
     "db:prune": "pnpm --filter @hitl/db prune-readings",
-    "db:import-mongo": "pnpm --filter @hitl/db import-mongo",
-    "db:seed-demo": "pnpm --filter @hitl/db seed-demo"
+    "db:import-mongo": "pnpm --filter @hitl/db import-mongo"
   }
 }

@@ -9,8 +9,8 @@
 
 // Where the portal is, as the ESP32 sees it. On the same Wi-Fi as a dev laptop:
 //   http://192.168.x.y:3000/api/sensor
-// Behind HTTPS (tunnel or real server):
-//   https://hitl.example.edu.my/api/sensor
+// HITL production endpoint (use your own URL for other deployments):
+//   https://hitl.reka-bytes.my/api/sensor
 #define ENDPOINT "http://192.168.1.10:3000/api/sensor"
 
 // From the portal: Rooms and sensors -> register the sensor -> copy the key.

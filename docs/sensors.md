@@ -15,7 +15,7 @@ The sketch below shows the legacy flat JSON format using a BME280. It does not r
 
 const char* WIFI_SSID = "...";
 const char* WIFI_PASS = "...";
-const char* ENDPOINT  = "https://hitl.example.edu.my/api/sensor";
+const char* ENDPOINT  = "https://hitl.reka-bytes.my/api/sensor";
 const char* DEVICE_KEY = "hitl_...";  // from the portal
 
 Adafruit_BME280 bme;
