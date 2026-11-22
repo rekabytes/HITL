@@ -2,37 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
-import { Badge } from "./ui";
+import type { PublicSensorStatus } from "@/lib/public-status";
+import { DeviceStatusCell, useDeviceStatus } from "./LiveDeviceStatus";
 
-interface SensorStatusModalProps {
-  deviceId: string;
-  label: string | null;
-  firmwareVersion: string | null;
-  rooms: string[];
-  lastSeen: string | null;
-  online: boolean;
-  temperature: number | null;
-  humidity: number | null;
-  pressure: number | null;
-  lastReading: string | null;
-}
-
-function StatusLine({ label, online, detail }: { label: string; online: boolean; detail: string }) {
-  return (
-    <div className="sensor-status-line">
-      <span className={`sensor-status-icon ${online ? "is-online" : "is-offline"}`}>
-        <Icon name={online ? "check" : "x"} size={15} strokeWidth={2.5} />
-      </span>
-      <span className="sensor-status-copy">
-        <strong>{label}</strong>
-        <span>{detail}</span>
-      </span>
-      <Badge tone={online ? "ok" : "danger"} dot>{online ? "Online" : "Offline"}</Badge>
-    </div>
-  );
-}
-
-export function SensorStatusModal(props: SensorStatusModalProps) {
+export function SensorStatusModal({ initial }: { initial: PublicSensorStatus }) {
+  const props = useDeviceStatus(initial.deviceId, initial) ?? initial;
+  const reading = props.sensor;
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -50,10 +25,6 @@ export function SensorStatusModal(props: SensorStatusModalProps) {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, [open]);
-
-  const sensorOnline = props.online && props.temperature !== null && props.humidity !== null;
-  const lastSeenText = props.lastSeen ? new Date(props.lastSeen).toLocaleString() : "Never";
-  const lastReadingText = props.lastReading ? new Date(props.lastReading).toLocaleString() : "No reading received";
 
   return (
     <>
@@ -81,20 +52,19 @@ export function SensorStatusModal(props: SensorStatusModalProps) {
             </div>
 
             <div className="sensor-status-list">
-              <StatusLine label="ESP32 connection" online={props.online} detail={props.online ? `Last seen ${lastSeenText}` : `Last seen ${lastSeenText}`} />
-              <StatusLine label="Sensor readings" online={sensorOnline} detail={sensorOnline ? `Latest reading ${lastReadingText}` : "No valid temperature and humidity reading"} />
+              <DeviceStatusCell deviceId={initial.deviceId} initial={initial} />
             </div>
 
             <div className="sensor-modal-grid">
               <div><span>Rooms</span><strong>{props.rooms.length ? props.rooms.join(", ") : "Not assigned"}</strong></div>
               <div><span>Firmware</span><strong>{props.firmwareVersion || "Not set"}</strong></div>
-              <div><span>Temperature</span><strong>{props.temperature === null ? "—" : `${props.temperature.toFixed(1)} °C`}</strong></div>
-              <div><span>Humidity</span><strong>{props.humidity === null ? "—" : `${props.humidity.toFixed(0)}%`}</strong></div>
-              {props.pressure !== null && <div><span>Pressure</span><strong>{props.pressure.toFixed(0)} hPa</strong></div>}
+              <div><span>Last real temperature</span><strong>{reading.temperatureC === null ? "—" : `${reading.temperatureC.toFixed(1)} °C`}</strong></div>
+              <div><span>Last real humidity</span><strong>{reading.humidityPct === null ? "—" : `${reading.humidityPct.toFixed(0)}%`}</strong></div>
+              {reading.pressureHpa !== null && <div><span>Last real pressure</span><strong>{reading.pressureHpa.toFixed(0)} hPa</strong></div>}
             </div>
 
             <div className="sensor-modal-foot">
-              <span><Icon name="info" size={14} /> Status is based on the latest reading received by HITL.</span>
+              <span><Icon name="info" size={14} /> Sensor status is unknown when the ESP32 stops reporting.</span>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Close</button>
             </div>
           </section>

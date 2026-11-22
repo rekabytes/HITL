@@ -22,6 +22,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - run: node --experimental-strip-types --test packages/shared/tests/device-status.test.mjs
       - run: pnpm --filter @hitl/web build
         env:
           NEXT_TELEMETRY_DISABLED: "1"

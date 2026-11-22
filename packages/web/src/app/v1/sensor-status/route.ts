@@ -1,3 +1,4 @@
+import { ESP32_ONLINE_MIN } from "@hitl/shared";
 import { json } from "@/lib/http";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { publicSensorStatuses } from "@/lib/public-status";
@@ -20,13 +21,13 @@ export async function GET(req: Request) {
     return json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      thresholds: { healthyMinutes: 30 },
+      thresholds: { onlineMinutes: ESP32_ONLINE_MIN },
       summary: {
         total: sensors.length,
-        healthy: sensors.filter((sensor) => sensor.sensor.status === "healthy").length,
-        stale: sensors.filter((sensor) => sensor.sensor.status === "stale").length,
+        online: sensors.filter((sensor) => sensor.sensor.status === "online").length,
+        offline: sensors.filter((sensor) => sensor.sensor.status === "offline").length,
         inactive: sensors.filter((sensor) => sensor.sensor.status === "inactive").length,
-        neverReported: sensors.filter((sensor) => sensor.sensor.status === "never_reported").length,
+        unknown: sensors.filter((sensor) => sensor.sensor.status === "unknown").length,
       },
       sensors: sensors.map((sensor) => ({
         deviceId: sensor.deviceId,

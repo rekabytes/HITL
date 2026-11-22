@@ -58,33 +58,34 @@ export default function DocsPage() {
           <CodeBlock>{`{
   "status": "ok",
   "timestamp": "...",
-  "thresholds": { "onlineMinutes": 10 },
+  "thresholds": { "onlineMinutes": 3 },
   "summary": { "total": 3, "online": 1, "offline": 2, "inactive": 0, "neverReported": 0 },
   "devices": [{
     "deviceId": "esp32-l21-prod-a",
     "label": "Sensor",
-    "firmwareVersion": "hitl-1.1.0",
+    "firmwareVersion": "hitl-1.2.0",
     "active": true,
     "status": "online",
     "lastSeenAt": "...",
+    "lastHeartbeatAt": "...",
     "rooms": ["L21"]
   }]
 }`}</CodeBlock>
         </Endpoint>
 
-        <Endpoint method="GET" path="/v1/sensor-status" description="Returns the latest reading and health status for every registered sensor.">
+        <Endpoint method="GET" path="/v1/sensor-status" description="Returns the last real reading and hardware status for every registered sensor.">
           <div className="api-subhead"><PanelHead title="Optional query" /></div>
           <p className="api-note"><code>?deviceId=esp32-l21-prod-a</code> filters the response to one sensor.</p>
           <CodeBlock>{`{
   "status": "ok",
   "timestamp": "...",
-  "thresholds": { "healthyMinutes": 30 },
-  "summary": { "total": 3, "healthy": 1, "stale": 2, "inactive": 0, "neverReported": 0 },
+  "thresholds": { "onlineMinutes": 3 },
+  "summary": { "total": 3, "online": 1, "offline": 1, "unknown": 1, "inactive": 0 },
   "sensors": [{
     "deviceId": "esp32-l21-prod-a",
     "label": "Sensor",
-    "firmwareVersion": "hitl-1.1.0",
-    "status": "healthy",
+    "firmwareVersion": "hitl-1.2.0",
+    "status": "online",
     "active": true,
     "lastReadingAt": "...",
     "temperatureC": 26.38,
@@ -100,10 +101,11 @@ export default function DocsPage() {
         <section className="panel">
           <PanelHead icon="activity" title="Status rules" />
           <dl className="api-definitions">
-            <dt>ESP32 online</dt><dd>Active and seen within 10 minutes.</dd>
-            <dt>ESP32 offline</dt><dd>Active, with a last-seen time older than 10 minutes.</dd>
-            <dt>Sensor healthy</dt><dd>Latest accepted reading is within 30 minutes.</dd>
-            <dt>Sensor stale</dt><dd>Latest reading is older than 30 minutes.</dd>
+            <dt>ESP32 online</dt><dd>Active and in contact within 3 minutes.</dd>
+            <dt>ESP32 offline</dt><dd>Active, with no contact for at least 3 minutes.</dd>
+            <dt>Sensor online</dt><dd>The connected ESP32 successfully read the BME280.</dd>
+            <dt>Sensor offline</dt><dd>The connected ESP32 could not read the BME280.</dd>
+            <dt>Sensor unknown</dt><dd>The ESP32 is offline or has not reported a sensor check.</dd>
             <dt>Inactive</dt><dd>Device is disabled in the admin.</dd>
             <dt>Never reported</dt><dd>No accepted timestamp or reading exists.</dd>
           </dl>

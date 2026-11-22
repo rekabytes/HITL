@@ -8,11 +8,19 @@ All bodies are JSON. Errors look like `{"error": "message"}`, and invalid bodies
 
 Header `X-Device-Key: <key>` (or `Authorization: Bearer <key>`).
 
+Current firmware reports every minute. A successful BME280 read sends:
+
 ```json
-{ "temperature": 27.4, "humidity": 66.1, "pressure": 1008.2 }
+{ "sensorStatus": "online", "firmwareVersion": "hitl-1.2.0", "reading": { "temperature": 27.4, "humidity": 66.1, "pressure": 1008.2 } }
 ```
 
-`pressure` is optional. Returns `{"status": "stored", "roomIds": ["..."], "assigned": true}`; a sensor covering several rooms stores the reading once per room. Limited to 120 readings a minute per sensor.
+If the hardware is unavailable, send a heartbeat without measurements:
+
+```json
+{ "sensorStatus": "offline", "firmwareVersion": "hitl-1.2.0" }
+```
+
+The failure report returns `{"status":"heartbeat","sensorStatus":"offline"}` and stores no reading. A successful read returns `{"status":"stored","roomIds":["..."],"assigned":true}`; an assigned reading is stored once per room. Up to 120 reports per minute are accepted per device. Legacy flat reading bodies still work during rollout, but do not confirm BME280 health. The firmware requires pressure for a valid read; legacy requests may omit it.
 
 ## Occupant app
 
@@ -58,10 +66,10 @@ These unauthenticated read-only endpoints are intended for backend monitoring. R
 |---|---|---|
 | `GET /v1/health` | Database, Redis, and ML service health | none |
 | `GET /v1/esp32-status` | ESP32 connectivity for all registered devices | optional `deviceId` |
-| `GET /v1/sensor-status` | Latest sensor reading health for all registered devices | optional `deviceId` |
+| `GET /v1/sensor-status` | BME280 hardware status for all registered devices | optional `deviceId` |
 
 `deviceId` filters to one device. It returns `400` for invalid values and `404` when the device does not exist. Status endpoints return `503` when their database query fails.
 
-ESP32 status is `online` when an active device was seen within 10 minutes; otherwise it is `offline`. Devices with no timestamp are `never_reported`, and disabled devices are `inactive`. Sensor status is `healthy` when its latest accepted reading is within 30 minutes; older readings are `stale`.
+The ESP32 is `online` if its heartbeat is less than 3 minutes old, or if a legacy device was seen within that window. Other states are `offline`, `never_reported`, and `inactive`. The BME280 is `online` after a successful check or `offline` after a failed check while the board is online. It is `unknown` if the ESP32 is offline or has not explicitly reported sensor health, and `inactive` if disabled.
 
-The ESP32 response includes device ID, label, firmware version, rooms, active state, status, and last-seen time. The sensor response includes those identity fields plus status, last-reading time, temperature, humidity, and pressure.
+`/v1/esp32-status` exposes `lastSeenAt` and `lastHeartbeatAt`. `/v1/sensor-status` exposes `lastReadingAt` and the last explicitly reported real measurements; these are historical values, not proof of current health. The sensor endpoint's previous `healthy` and `stale` statuses and counters have been replaced by `online`, `offline`, and `unknown`.

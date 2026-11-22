@@ -1,9 +1,8 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { rooms, sensorReadings, sensorRooms, sensors } from "@hitl/db";
 import { db } from "./db";
 
-export const ESP32_ONLINE_MIN = 10;
-export const SENSOR_FRESH_MIN = 30;
+import { deviceStatus } from "@hitl/shared";
 
 export type PublicSensorStatus = {
   deviceId: string;
@@ -12,10 +11,11 @@ export type PublicSensorStatus = {
   active: boolean;
   esp32: {
     status: "online" | "offline" | "inactive" | "never_reported";
+    lastHeartbeatAt: string | null;
     lastSeenAt: string | null;
   };
   sensor: {
-    status: "healthy" | "stale" | "inactive" | "never_reported";
+    status: "online" | "offline" | "unknown" | "inactive";
     lastReadingAt: string | null;
     temperatureC: number | null;
     humidityPct: number | null;
@@ -34,10 +34,6 @@ type LatestRow = {
   recordedAt: Date;
 };
 
-function freshness(date: Date | null, minutes: number): boolean {
-  return !!date && date.getTime() > Date.now() - minutes * 60_000;
-}
-
 export async function publicSensorStatuses(deviceId?: string): Promise<PublicSensorStatus[]> {
   const sensorRows = await db()
     .select()
@@ -51,10 +47,10 @@ export async function publicSensorStatuses(deviceId?: string): Promise<PublicSen
   const roomRows = await db()
     .select({ sensorId: sensorRooms.sensorId, code: rooms.code })
     .from(sensorRooms)
-    .innerJoin(rooms, eq(rooms.id, sensorRooms.roomId));
+    .innerJoin(rooms, eq(rooms.id, sensorRooms.roomId))
+    .where(inArray(sensorRooms.sensorId, ids));
   const roomsBySensor = new Map<string, string[]>();
   for (const row of roomRows) {
-    if (!ids.includes(row.sensorId)) continue;
     const list = roomsBySensor.get(row.sensorId) ?? [];
     list.push(row.code);
     roomsBySensor.set(row.sensorId, list);
@@ -69,8 +65,9 @@ export async function publicSensorStatuses(deviceId?: string): Promise<PublicSen
       recordedAt: sensorReadings.recordedAt,
     })
     .from(sensorReadings)
+    .innerJoin(sensors, and(eq(sensors.id, sensorReadings.sensorId), eq(sensors.lastRealReadingAt, sensorReadings.recordedAt)))
     .where(inArray(sensorReadings.sensorId, ids))
-    .orderBy(sensorReadings.sensorId, desc(sensorReadings.recordedAt));
+    .orderBy(sensorReadings.sensorId);
   const latestBySensor = new Map<string, LatestRow>();
   for (const row of latestRows) {
     if (row.sensorId) latestBySensor.set(row.sensorId, row);
@@ -78,19 +75,19 @@ export async function publicSensorStatuses(deviceId?: string): Promise<PublicSen
 
   return sensorRows.map((sensor: SensorRow) => {
     const latest = latestBySensor.get(sensor.id);
-    const espOnline = freshness(sensor.lastSeenAt, ESP32_ONLINE_MIN);
-    const sensorFresh = freshness(latest?.recordedAt ?? null, SENSOR_FRESH_MIN);
+    const status = deviceStatus(sensor);
     return {
       deviceId: sensor.deviceId,
       label: sensor.label,
       firmwareVersion: sensor.firmwareVersion,
       active: sensor.active,
       esp32: {
-        status: !sensor.active ? "inactive" : !sensor.lastSeenAt ? "never_reported" : espOnline ? "online" : "offline",
+        status: status.esp32,
+        lastHeartbeatAt: sensor.lastHeartbeatAt?.toISOString() ?? null,
         lastSeenAt: sensor.lastSeenAt?.toISOString() ?? null,
       },
       sensor: {
-        status: !sensor.active ? "inactive" : !latest ? "never_reported" : sensorFresh ? "healthy" : "stale",
+        status: status.sensor,
         lastReadingAt: latest?.recordedAt.toISOString() ?? null,
         temperatureC: latest?.temperatureC ?? null,
         humidityPct: latest?.humidityPct ?? null,

@@ -80,8 +80,16 @@ async function computeLatest(roomId: string): Promise<LatestReading | null> {
   };
 }
 
-/** Stores one reading row per room the sensor covers (or one unassigned row), then updates caches and alerts. */
-export async function ingestReading(sensor: Sensor, input: SensorReadingInput) {
+/** Records contact even when the BME280 cannot provide a measurement. */
+export async function recordSensorFailure(sensor: Sensor, firmwareVersion: string) {
+  const now = new Date();
+  await db().update(sensors).set({
+    lastSeenAt: now, lastHeartbeatAt: now, sensorResponding: false, firmwareVersion,
+  }).where(eq(sensors.id, sensor.id));
+}
+
+/** Stores a reading and its device status together, then updates caches and alerts. */
+export async function ingestReading(sensor: Sensor, input: SensorReadingInput, firmwareVersion?: string) {
   const recordedAt = new Date();
   const roomIds = await sensorRoomIds(sensor.id);
   const base = {
@@ -91,10 +99,14 @@ export async function ingestReading(sensor: Sensor, input: SensorReadingInput) {
     pressureHpa: input.pressure ?? null,
     recordedAt,
   };
-  await db()
-    .insert(sensorReadings)
-    .values(roomIds.length ? roomIds.map((roomId) => ({ ...base, roomId })) : [{ ...base, roomId: null }]);
-  await db().update(sensors).set({ lastSeenAt: recordedAt }).where(eq(sensors.id, sensor.id));
+  await db().transaction(async (tx) => {
+    await tx.update(sensors).set(firmwareVersion ? {
+      lastSeenAt: recordedAt, lastHeartbeatAt: recordedAt, sensorResponding: true,
+      lastRealReadingAt: recordedAt, firmwareVersion,
+    } : { lastSeenAt: recordedAt }).where(eq(sensors.id, sensor.id));
+    await tx.insert(sensorReadings)
+      .values(roomIds.length ? roomIds.map((roomId) => ({ ...base, roomId })) : [{ ...base, roomId: null }]);
+  });
 
   for (const roomId of roomIds) {
     // Recompute the room average with this reading in it; alerts and the live feed use the average.

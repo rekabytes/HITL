@@ -2,7 +2,7 @@
 
 1. In the portal go to **Rooms and sensors**, register the device with its firmware version, pick the room it sits in (or several rooms for a sensor in a shared space) and copy the key. It is shown once; **New key** makes another and turns the old one off.
 2. Put the portal URL and the key in the firmware.
-3. Post a reading every 30 to 60 seconds.
+3. Report a heartbeat and BME280 check every minute. Send measurements only after a successful check.
 
 Ready-to-flash firmware is in [`firmware/hitl-sensor`](../firmware/README.md): it finds the BME280 at either address, reconnects Wi-Fi, retries failed posts and explains errors on the serial log. The minimal sketch below shows the protocol.
 
@@ -52,6 +52,6 @@ A large room can have more than one sensor. The room's current temperature and h
 
 ## Status
 
-A sensor counts as online when it sent a reading in the last 10 minutes. After 30 minutes of silence an assigned sensor opens a "sensor offline" alert in each of its rooms.
+An ESP32 is online when it sent a heartbeat in the last 3 minutes. A failed BME280 check shows Sensor Offline while the ESP32 stays Online. If the ESP32 falls offline, the sensor status becomes Unknown. The separate room alert still checks for 30 minutes without device contact when staff open the FM dashboard or Alerts page.
 
 Deleting a sensor keeps its past readings. Deleting a room removes everything recorded for it, so the portal asks you to type the room code first.

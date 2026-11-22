@@ -39,6 +39,15 @@ export const sensorReadingInput = z.object({
 });
 export type SensorReadingInput = z.infer<typeof sensorReadingInput>;
 
+// An online report must carry a real reading; an offline report cannot carry one.
+export const sensorReportInput = z.union([
+  z.discriminatedUnion("sensorStatus", [
+    z.strictObject({ sensorStatus: z.literal("online"), firmwareVersion: z.string().min(1).max(64), reading: sensorReadingInput.extend({ pressure: z.number().min(300).max(1200) }).strict() }),
+    z.strictObject({ sensorStatus: z.literal("offline"), firmwareVersion: z.string().min(1).max(64) }),
+  ]),
+  sensorReadingInput.strict(),
+]);
+
 /** Body the mobile app (or the web form) posts to /api/feedback. */
 export const feedbackInput = z.object({
   roomCode: roomCodeSchema,

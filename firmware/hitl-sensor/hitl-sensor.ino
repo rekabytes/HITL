@@ -1,11 +1,11 @@
-// HITL room sensor: ESP32 + BME280, posts a reading to the portal every minute.
+// HITL room sensor: ESP32 + BME280, reports board and sensor status every minute.
 //
 // Wiring (I2C): BME280 VIN -> 3V3, GND -> GND, SCL -> GPIO 22, SDA -> GPIO 21.
 // Settings live in config.h (copy config.example.h). See firmware/README.md.
 //
 // Built to be left alone in a room: it finds the BME280 at either address,
 // reconnects Wi-Fi on its own, retries failed posts, and restarts itself if it
-// cannot deliver a reading for 15 minutes.
+// cannot deliver a report for 15 minutes.
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -19,21 +19,15 @@
 #error "Copy config.example.h to config.h and fill in your Wi-Fi, ENDPOINT and DEVICE_KEY."
 #endif
 
-#define FIRMWARE_VERSION "hitl-1.1.0"
+#define FIRMWARE_VERSION "hitl-1.2.0"
 
-// Older config.h files do not have this setting: default to real readings only.
-#ifndef DEMO_IF_NO_SENSOR
-#define DEMO_IF_NO_SENSOR 0
-#endif
-static const uint32_t SENSOR_RETRY_MS = 60000;  // demo mode: look for a sensor again this often
-
-// Onboard LED on most ESP32 DevKit boards. Blinks once per delivered reading.
+// Onboard LED on most ESP32 DevKit boards. Blinks once per delivered report.
 #ifndef LED_PIN
 #define LED_PIN 2
 #endif
 
 static const uint32_t WIFI_TIMEOUT_MS = 20000;
-static const uint32_t RESTART_AFTER_MS = 15UL * 60UL * 1000UL;  // no delivered reading for this long
+static const uint32_t RESTART_AFTER_MS = 15UL * 60UL * 1000UL;  // no delivered report for this long
 static const uint32_t RETRY_MS = 10000;                          // after a failed post
 
 Adafruit_BME280 bme;
@@ -41,15 +35,7 @@ uint32_t lastPostAt = 0;
 uint32_t lastSuccessAt = 0;
 bool lastPostOk = true;
 bool haveSensor = false;
-uint32_t lastSensorTry = 0;
-
-// Simulated room: a slow 20-minute swing around 25 °C and 62 %, with a little noise.
-void demoReading(float& t, float& h, float& p) {
-  float phase = (millis() % 1200000UL) / 1200000.0f * 2.0f * PI;
-  t = 25.0f + 1.5f * sinf(phase) + random(-10, 11) / 100.0f;
-  h = 62.0f - 4.0f * sinf(phase) + random(-20, 21) / 100.0f;
-  p = 1006.0f + random(-5, 6) / 10.0f;
-}
+uint8_t sensorAddress = 0;
 
 void blink(int times, int ms = 80) {
   for (int i = 0; i < times; i++) {
@@ -62,9 +48,9 @@ void blink(int times, int ms = 80) {
 
 // Tries both I2C addresses. Explains the usual reasons it fails.
 bool startSensor() {
-  Wire.begin(21, 22);
   for (uint8_t addr : {0x76, 0x77}) {
     if (bme.begin(addr, &Wire)) {
+      sensorAddress = addr;
       Serial.printf("[bme] BME280 found at 0x%02X\n", addr);
       // Weather-station settings: one measurement when asked, little self-heating.
       bme.setSampling(Adafruit_BME280::MODE_FORCED, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1,
@@ -138,10 +124,23 @@ bool connectWifi() {
   return true;
 }
 
-// Posts one reading. Returns true when the portal stored it.
-bool postReading(float t, float h, float p) {
-  char body[112];
-  snprintf(body, sizeof body, "{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.1f}", t, h, p);
+bool sensorAnswers() {
+  // Confirm the BME280 chip ID, not just that some device ACKs this address.
+  Wire.beginTransmission(sensorAddress);
+  Wire.write(0xD0);
+  return Wire.endTransmission(false) == 0 &&
+         Wire.requestFrom(sensorAddress, (uint8_t)1) == 1 && Wire.read() == 0x60;
+}
+
+// A failed sensor check is still a successful heartbeat if the portal accepts it.
+bool postReport(bool measured, float t, float h, float p) {
+  char body[192];
+  if (measured) {
+    snprintf(body, sizeof body, "{\"sensorStatus\":\"online\",\"firmwareVersion\":\"" FIRMWARE_VERSION
+             "\",\"reading\":{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.1f}}", t, h, p);
+  } else {
+    snprintf(body, sizeof body, "{\"sensorStatus\":\"offline\",\"firmwareVersion\":\"" FIRMWARE_VERSION "\"}");
+  }
 
   HTTPClient http;
   WiFiClientSecure secure;
@@ -165,7 +164,7 @@ bool postReading(float t, float h, float p) {
 
   Serial.printf("[post] %s -> %d %s\n", body, code, reply.c_str());
   if (code == 401) Serial.println("[post] The portal does not know this DEVICE_KEY. Copy it again from Rooms and sensors.");
-  if (code == 429) Serial.println("[post] Too many readings. Raise POST_INTERVAL_S.");
+  if (code == 429) Serial.println("[post] Too many reports. Raise POST_INTERVAL_S.");
   if (code < 0) Serial.println("[post] Could not reach the portal. Check ENDPOINT, and that the server is reachable from this Wi-Fi.");
   if (code == 200 && reply.indexOf("\"assigned\":false") >= 0) {
     Serial.println("[post] Stored, but this sensor has no room yet. Assign it a room in the portal.");
@@ -179,69 +178,45 @@ void setup() {
   delay(300);
   Serial.printf("\nHITL sensor %s\n", FIRMWARE_VERSION);
 
-  haveSensor = startSensor();
-  lastSensorTry = millis();
-#if DEMO_IF_NO_SENSOR
-  if (!haveSensor) Serial.println("[demo] No BME280: sending simulated readings. Plug a sensor in and it switches to real ones.");
-#else
-  while (!haveSensor) {
-    blink(3, 150);  // three slow blinks: sensor problem
-    delay(5000);
-    haveSensor = startSensor();
-  }
-#endif
-  randomSeed(esp_random());
+  Wire.begin(21, 22);
+  Wire.setTimeOut(50);
   connectWifi();
   lastSuccessAt = millis();
-  lastPostAt = millis() - POST_INTERVAL_S * 1000UL;  // first reading straight away
+  lastPostAt = millis() - POST_INTERVAL_S * 1000UL;  // first report straight away
 }
 
 void loop() {
   uint32_t now = millis();
   uint32_t wait = lastPostOk ? POST_INTERVAL_S * 1000UL : RETRY_MS;
 
-  // Demo mode: keep looking for a real sensor, and switch to it once it answers.
-  if (!haveSensor && now - lastSensorTry >= SENSOR_RETRY_MS) {
-    lastSensorTry = now;
-    haveSensor = startSensor();
-    if (haveSensor) Serial.println("[demo] Sensor found, switching to real readings.");
-  }
-
   if (now - lastPostAt >= wait) {
     lastPostAt = now;
+    if (!haveSensor) haveSensor = startSensor();
+
     float t = NAN, h = NAN, p = NAN;
     bool measured = false;
-    if (haveSensor) {
-      if (bme.takeForcedMeasurement()) {
-        t = bme.readTemperature();
-        h = bme.readHumidity();
-        p = bme.readPressure() / 100.0F;
-        measured = true;
-      }
-    } else {
-      demoReading(t, h, p);
-      measured = true;
-      Serial.print("[demo] ");
+    if (haveSensor && sensorAnswers() && bme.takeForcedMeasurement()) {
+      t = bme.readTemperature();
+      h = bme.readHumidity();
+      p = bme.readPressure() / 100.0F;
+      measured = sensorAnswers() && isfinite(t) && isfinite(h) && isfinite(p) &&
+                 t >= -20 && t <= 70 && h >= 0 && h <= 100 && p >= 300 && p <= 1200;
     }
-    if (connectWifi() && measured) {
-      if (isnan(t) || isnan(h)) {
-        Serial.println("[bme] Got NaN. Loose wire?");
-        lastPostOk = false;
-      } else {
-        lastPostOk = postReading(t, h, p);
-        if (lastPostOk) {
-          lastSuccessAt = now;
-          blink(1);
-        }
-      }
-    } else {
-      lastPostOk = false;
+    if (!measured) {
+      haveSensor = false;  // Try both addresses again at the next report.
+      Serial.println("[bme] No valid reading; reporting sensor offline.");
+    }
+
+    lastPostOk = connectWifi() && postReport(measured, t, h, p);
+    if (lastPostOk) {
+      lastSuccessAt = millis();
+      blink(1);
     }
   }
 
   // Last resort for a sensor nobody is watching: a clean restart fixes most stuck states.
   if (millis() - lastSuccessAt > RESTART_AFTER_MS) {
-    Serial.println("[sys] No reading delivered for 15 minutes, restarting.");
+    Serial.println("[sys] No report delivered for 15 minutes, restarting.");
     delay(200);
     ESP.restart();
   }

@@ -35,19 +35,19 @@ Use your board's COM port (`arduino-cli board list`). For an ESP32-S3 use `--fqb
 
 | Message | Meaning |
 |---|---|
-| `[post] ... -> 200 {"status":"stored"...}` | Working. The LED blinks once per reading |
+| `[post] ... -> 200 {"status":"stored"...}` | Working. The LED blinks once per accepted report |
 | `-> 401` | Wrong or replaced device key |
 | `-> -1` (connection refused) | `ENDPOINT` unreachable from this Wi-Fi. A dev server inside WSL needs mirrored networking and a firewall rule for port 3000 |
 | `"assigned":false` | Stored, but the sensor has no room in the portal yet |
 | `Found a BMP280` | Wrong chip, no humidity |
 | `No sensor found` | Check the four wires |
-| Three slow blinks, repeating | Sensor not found |
+| `[post] ... -> 200 {"status":"heartbeat"...}` | Board online; no valid BME280 reading |
 
-The board restarts itself if no reading gets through for 15 minutes, and reconnects Wi-Fi on its own.
+The board restarts itself if no report gets through for 15 minutes, and reconnects Wi-Fi on its own.
 
 ## Testing without a sensor
 
-With `DEMO_IF_NO_SENSOR 1` in `config.h`, a board with no BME280 sends simulated readings (a slow swing around 25 °C and 62 %), marked `[demo]` in the serial log, so Wi-Fi, the device key and the dashboard can be checked first. It looks for a sensor every minute and switches to real readings once one answers. Set it to `0` before deploying, so a failed sensor shows as offline instead of sending made-up numbers.
+Without a working BME280, the board continues sending authenticated heartbeats and retries sensor detection on each report. HITL shows ESP32 Online / BME280 Offline. No simulated measurements are sent. Deploy a backend that supports heartbeat reports before flashing this version.
 
 ## Dev server in WSL
 

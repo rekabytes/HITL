@@ -1,3 +1,4 @@
+import { ESP32_ONLINE_MIN } from "@hitl/shared";
 import { json } from "@/lib/http";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { publicSensorStatuses } from "@/lib/public-status";
@@ -24,12 +25,13 @@ export async function GET(req: Request) {
       active: sensor.active,
       status: sensor.esp32.status,
       lastSeenAt: sensor.esp32.lastSeenAt,
+      lastHeartbeatAt: sensor.esp32.lastHeartbeatAt,
       rooms: sensor.rooms,
     }));
     return json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      thresholds: { onlineMinutes: 10 },
+      thresholds: { onlineMinutes: ESP32_ONLINE_MIN },
       summary: {
         total: devices.length,
         online: devices.filter((device) => device.status === "online").length,

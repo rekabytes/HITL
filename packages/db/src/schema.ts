@@ -85,6 +85,9 @@ export const sensors = pgTable("sensors", {
   firmwareVersion: text("firmware_version"),
   active: boolean("active").notNull().default(true),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
+  sensorResponding: boolean("sensor_responding"),
+  lastRealReadingAt: timestamp("last_real_reading_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 

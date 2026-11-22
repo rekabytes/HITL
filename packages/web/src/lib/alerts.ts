@@ -149,6 +149,6 @@ export async function checkOfflineSensors() {
     .where(and(eq(sensors.active, true), isNotNull(sensors.lastSeenAt), lt(sensors.lastSeenAt, cutoff)));
   for (const s of quiet) {
     await raiseAutoAlert(s.roomId, "sensor_offline", "warning",
-      `Sensor ${s.deviceId} has sent nothing for over ${OFFLINE_AFTER_MIN} minutes.`);
+      `ESP32 ${s.deviceId} has not contacted HITL for over ${OFFLINE_AFTER_MIN} minutes.`);
   }
 }

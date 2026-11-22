@@ -7,7 +7,7 @@ import { Badge, Empty, EmptyRow, PageHeader, PanelHead } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { listRooms } from "@/lib/readings";
-import { timeAgo } from "@/lib/time";
+import { DeviceStatusCell, LiveDeviceStatus } from "@/components/LiveDeviceStatus";
 import {
   createBuildingAction,
   createRoomAction,
@@ -22,7 +22,6 @@ import {
 
 export const metadata: Metadata = { title: "Rooms and sensors" };
 
-const ONLINE_MS = 10 * 60_000;
 
 export default async function RoomsPage() {
   await requireAdmin();
@@ -218,6 +217,7 @@ export default async function RoomsPage() {
       <section className="panel panel-flush mt">
         <PanelHead icon="cpu" title="Sensors" count={sensorRows.length} />
         <div className="table-wrap">
+          <LiveDeviceStatus>
           <table>
             <thead>
               <tr>
@@ -231,23 +231,13 @@ export default async function RoomsPage() {
             <tbody>
               {sensorRows.length === 0 && <EmptyRow colSpan={5} icon="cpu">No sensors registered.</EmptyRow>}
               {sensorRows.map((s) => {
-                const online = !!s.lastSeenAt && Date.now() - s.lastSeenAt.getTime() < ONLINE_MS;
                 return (
                   <tr key={s.id}>
                     <td>
                       <div className="cell-title">{s.deviceId}</div>
                       <div className="cell-sub">{s.firmwareVersion ? `Firmware ${s.firmwareVersion}` : "No firmware set"}</div>
                     </td>
-                    <td>
-                      {!s.active ? (
-                        <Badge dot>Off</Badge>
-                      ) : online ? (
-                        <Badge tone="ok" dot>Online</Badge>
-                      ) : (
-                        <Badge tone="danger" dot>Offline</Badge>
-                      )}
-                      <div className="cell-sub">{timeAgo(s.lastSeenAt)}</div>
-                    </td>
+                    <td><DeviceStatusCell deviceId={s.deviceId} /></td>
                     <td>
                       <ActionForm action={updateSensorAction} submitLabel="Save" icon="save" variant="ghost" size="sm" className="form-inline">
                         <input type="hidden" name="id" value={s.id} />
@@ -285,6 +275,7 @@ export default async function RoomsPage() {
               })}
             </tbody>
           </table>
+          </LiveDeviceStatus>
         </div>
       </section>
     </>
