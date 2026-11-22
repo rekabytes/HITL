@@ -1,12 +1,12 @@
-# Sensors (ESP32 + BME280)
+# Environmental sensors (ESP32 + SHT3x or BME280)
 
 1. In the portal go to **Rooms and sensors**, register the device with its firmware version, pick the room it sits in (or several rooms for a sensor in a shared space) and copy the key. It is shown once; **New key** makes another and turns the old one off.
 2. Put the portal URL and the key in the firmware.
-3. Report a heartbeat and BME280 check every minute. Send measurements only after a successful check.
+3. Report a heartbeat and environmental sensor check every minute. Send measurements only after a successful check.
 
-Ready-to-flash firmware is in [`firmware/hitl-sensor`](../firmware/README.md): it finds the BME280 at either address, reconnects Wi-Fi, retries failed posts and explains errors on the serial log. The minimal sketch below shows the protocol.
+Ready-to-flash firmware is in [`firmware/hitl-sensor`](../firmware/README.md): it checks for SHT3x at `0x44`/`0x45` before trying BME280 at `0x76`/`0x77`, reconnects Wi-Fi, retries failed posts and logs errors over serial. See [the API documentation](api.md#sensors) for the current report format.
 
-The JSON body keeps the field names the old firmware used, so the only firmware change is the header.
+The sketch below shows the legacy flat JSON format using a BME280. It does not report sensor health. SHT3x reports temperature and humidity with `pressure: null`.
 
 ```cpp
 #include <WiFi.h>
@@ -52,10 +52,10 @@ A large room can have more than one sensor. The room's current temperature and h
 
 ## Status
 
-An ESP32 is online when it sent a heartbeat in the last 3 minutes. A failed BME280 check shows Sensor Offline while the ESP32 stays Online. If the ESP32 falls offline, the sensor status becomes Unknown. The separate room alert still checks for 30 minutes without device contact when staff open the FM dashboard or Alerts page.
+An ESP32 is online when it sent a heartbeat in the last 3 minutes. A failed environmental sensor check shows Sensor Offline while the ESP32 stays Online. If the ESP32 falls offline, the sensor status becomes Unknown. The separate room alert still checks for 30 minutes without device contact when staff open the FM dashboard or Alerts page.
 
 Deleting a sensor keeps its past readings. Deleting a room removes everything recorded for it, so the portal asks you to type the room code first.
 
 ## Optional CO₂ monitoring
 
-The ESP32 can monitor the SC8-CO2-5K independently from the BME280. See the [firmware wiring and rollout instructions](../firmware/README.md#optional-sc8-co2-5k-sensor). The admin and FM sensor pages show CO₂ status separately. The FM dashboard shows current ppm from online sensors, and Analytics shows historical ppm. The public `/v1/sensor-status` response exposes both the CO₂ state and its last stored measurement.
+The ESP32 can monitor the SC8-CO2-5K independently from the environmental sensor. See the [firmware wiring and rollout instructions](../firmware/README.md#optional-sc8-co2-5k-sensor). The admin and FM sensor pages show CO₂ status separately. The FM dashboard shows current ppm from online sensors, and Analytics shows historical ppm. The public `/v1/sensor-status` response exposes both the CO₂ state and its last stored measurement.

@@ -131,7 +131,7 @@ export const sensorReadings = pgTable(
 
 /**
  * CO2 readings, kept apart from sensor_readings so a working CO2 sensor is
- * still recorded while the BME280 on the same board is failing (and the
+ * still recorded while the environmental sensor on the same board is failing (and the
  * other way round). Stored once per room the sensor covers, like readings.
  */
 export const co2Readings = pgTable(

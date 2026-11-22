@@ -1,6 +1,6 @@
 # HITL Smart Building
 
-Human-in-the-loop environmental monitoring for buildings. ESP32 + BME280 sensors report temperature and humidity, occupants scan the QR code on the door and vote on comfort from their phone, and facility managers see both side by side with alerts and advice. A comfort model learns from the votes what people in these rooms actually call comfortable.
+Human-in-the-loop environmental monitoring for buildings. ESP32 devices with SHT3x or BME280 sensors report temperature and humidity, occupants scan the QR code on the door and vote on comfort from their phone, and facility managers see both side by side with alerts and advice. A comfort model learns from the votes what people in these rooms actually call comfortable.
 
 This repo is the rewrite of the Streamlit + Flutter + FastAPI + MongoDB final-year project into one monorepo. The Flutter app is replaced by an installable web app (PWA) in the same Next.js project.
 

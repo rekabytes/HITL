@@ -40,7 +40,7 @@ export const sensorReadingInput = z.object({
 export type SensorReadingInput = z.infer<typeof sensorReadingInput>;
 
 /**
- * CO2 sensor check, sent next to the BME280 status by boards that have a CO2
+ * CO2 sensor check, sent next to the environmental sensor status by boards that have a CO2
  * sensor (NDIR, for example the SC8-CO2-5K). Boards without one leave it out.
  * "warming_up": the sensor answers but is inside its preheat time, so the
  * value is not trustworthy yet and is not sent.
@@ -55,10 +55,10 @@ export const co2ReportInput = z.discriminatedUnion("status", [
 export type Co2ReportInput = z.infer<typeof co2ReportInput>;
 
 // An online report must carry a real reading; an offline report cannot carry one.
-// The CO2 check is independent of the BME280: either can work while the other fails.
+// The CO2 check is independent of the environmental sensor: either can work while the other fails.
 export const sensorReportInput = z.union([
   z.discriminatedUnion("sensorStatus", [
-    z.strictObject({ sensorStatus: z.literal("online"), firmwareVersion: z.string().min(1).max(64), reading: sensorReadingInput.extend({ pressure: z.number().min(300).max(1200) }).strict(), co2: co2ReportInput.optional() }),
+    z.strictObject({ sensorStatus: z.literal("online"), firmwareVersion: z.string().min(1).max(64), reading: sensorReadingInput.strict(), co2: co2ReportInput.optional() }),
     z.strictObject({ sensorStatus: z.literal("offline"), firmwareVersion: z.string().min(1).max(64), co2: co2ReportInput.optional() }),
   ]),
   sensorReadingInput.strict(),

@@ -1,11 +1,11 @@
-// HITL room sensor: ESP32 + BME280, reports board and sensor status every minute.
+// HITL room sensor: ESP32 + SHT3x/BME280, reports board and sensor status every minute.
 //
-// Wiring (I2C): BME280 VIN -> 3V3, GND -> GND, SCL -> GPIO 22, SDA -> GPIO 21.
+// Wiring (I2C): SHT3x VCC -> 3V3, GND -> GND, SCL -> GPIO 22, SDA -> GPIO 21.
 // Settings live in config.h (copy config.example.h). See firmware/README.md.
 //
-// Built to be left alone in a room: it finds the BME280 at either address,
-// reconnects Wi-Fi on its own, retries failed posts, and restarts itself if it
-// cannot deliver a report for 15 minutes.
+// Built to be left alone in a room: it finds SHT3x at 0x44/0x45 or BME280 at
+// 0x76/0x77, reconnects Wi-Fi on its own, retries failed posts, and restarts
+// itself if it cannot deliver a report for 15 minutes.
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -20,9 +20,9 @@
 #error "Copy config.example.h to config.h and fill in your Wi-Fi, ENDPOINT and DEVICE_KEY."
 #endif
 
-#define FIRMWARE_VERSION "hitl-1.3.0"
+#define FIRMWARE_VERSION "hitl-1.4.0"
 
-// Existing deployments remain BME280-only until CO2_RX_PIN is set in config.h.
+// CO2 monitoring is enabled only when CO2_RX_PIN is set in config.h.
 #ifdef CO2_RX_PIN
 HardwareSerial co2Serial(2);
 Sc8Parser co2Parser;
@@ -48,7 +48,9 @@ static const uint32_t WIFI_TIMEOUT_MS = 20000;
 static const uint32_t RESTART_AFTER_MS = 15UL * 60UL * 1000UL;  // no delivered report for this long
 static const uint32_t RETRY_MS = 10000;                          // after a failed post
 
+enum class SensorKind { None, Bme280, Sht3x };
 Adafruit_BME280 bme;
+SensorKind sensorKind = SensorKind::None;
 uint32_t lastPostAt = 0;
 uint32_t lastSuccessAt = 0;
 bool lastPostOk = true;
@@ -64,32 +66,55 @@ void blink(int times, int ms = 80) {
   }
 }
 
-// Tries both I2C addresses. Explains the usual reasons it fails.
+uint8_t crc8(const uint8_t* data, size_t length) {
+  uint8_t crc = 0xFF;
+  while (length--) {
+    crc ^= *data++;
+    for (uint8_t bit = 0; bit < 8; ++bit) crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : crc << 1;
+  }
+  return crc;
+}
+
+bool readSht3x(uint8_t address, float& temperature, float& humidity) {
+  const uint8_t command[] = {0x24, 0x00};
+  Wire.beginTransmission(address);
+  Wire.write(command, sizeof(command));
+  if (Wire.endTransmission() != 0) return false;
+  delay(20);
+  if (Wire.requestFrom(address, (uint8_t)6) != 6) return false;
+  uint8_t data[6];
+  for (uint8_t i = 0; i < 6; ++i) data[i] = Wire.read();
+  if (crc8(data, 2) != data[2] || crc8(data + 3, 2) != data[5]) return false;
+  const uint16_t rawTemperature = (uint16_t(data[0]) << 8) | data[1];
+  const uint16_t rawHumidity = (uint16_t(data[3]) << 8) | data[4];
+  temperature = -45.0F + 175.0F * (float(rawTemperature) / 65535.0F);
+  humidity = 100.0F * (float(rawHumidity) / 65535.0F);
+  return isfinite(temperature) && isfinite(humidity) && temperature >= -20 && temperature <= 70 && humidity >= 0 && humidity <= 100;
+}
+
+// Prefer the installed SHT3x; retain BME280 support for compatible boards.
 bool startSensor() {
+  sensorKind = SensorKind::None;
+  for (uint8_t addr : {0x44, 0x45}) {
+    float temperature, humidity;
+    if (readSht3x(addr, temperature, humidity)) {
+      sensorAddress = addr;
+      sensorKind = SensorKind::Sht3x;
+      Serial.printf("[sht3x] Found at 0x%02X; pressure unavailable\n", addr);
+      return true;
+    }
+  }
   for (uint8_t addr : {0x76, 0x77}) {
     if (bme.begin(addr, &Wire)) {
       sensorAddress = addr;
+      sensorKind = SensorKind::Bme280;
       Serial.printf("[bme] BME280 found at 0x%02X\n", addr);
-      // Weather-station settings: one measurement when asked, little self-heating.
       bme.setSampling(Adafruit_BME280::MODE_FORCED, Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::SAMPLING_X1,
                       Adafruit_BME280::SAMPLING_X1, Adafruit_BME280::FILTER_OFF);
       return true;
     }
   }
-  // Read the chip id ourselves to tell a BMP280 (no humidity) apart from a wiring fault.
-  for (uint8_t addr : {0x76, 0x77}) {
-    Wire.beginTransmission(addr);
-    Wire.write(0xD0);
-    if (Wire.endTransmission() == 0 && Wire.requestFrom(addr, (uint8_t)1) == 1) {
-      uint8_t id = Wire.read();
-      if (id == 0x58) {
-        Serial.printf("[bme] Found a BMP280 at 0x%02X, not a BME280. It has no humidity sensor; HITL needs a BME280.\n", addr);
-        return false;
-      }
-      Serial.printf("[bme] Unknown chip id 0x%02X at 0x%02X.\n", id, addr);
-    }
-  }
-  Serial.println("[bme] No sensor found. Check: VIN to 3V3, GND to GND, SCL to GPIO 22, SDA to GPIO 21.");
+  Serial.println("[sensor] No SHT3x or BME280 found. Check VCC to 3V3, GND to GND, SCL to GPIO 22, SDA to GPIO 21.");
   return false;
 }
 
@@ -145,8 +170,7 @@ bool connectWifi() {
   return true;
 }
 
-bool sensorAnswers() {
-  // Confirm the BME280 chip ID, not just that some device ACKs this address.
+bool bmeAnswers() {
   Wire.beginTransmission(sensorAddress);
   Wire.write(0xD0);
   return Wire.endTransmission(false) == 0 &&
@@ -172,8 +196,11 @@ bool postReport(bool measured, float t, float h, float p) {
 #endif
   int length;
   if (measured) {
-    length = snprintf(body, sizeof body, "{\"sensorStatus\":\"online\",\"firmwareVersion\":\"" FIRMWARE_VERSION
-                      "\",\"reading\":{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.1f}%s}", t, h, p, co2);
+    if (isfinite(p)) {
+      length = snprintf(body, sizeof body, "{\"sensorStatus\":\"online\",\"firmwareVersion\":\"" FIRMWARE_VERSION "\",\"reading\":{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.1f}%s}", t, h, p, co2);
+    } else {
+      length = snprintf(body, sizeof body, "{\"sensorStatus\":\"online\",\"firmwareVersion\":\"" FIRMWARE_VERSION "\",\"reading\":{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":null}%s}", t, h, co2);
+    }
   } else {
     length = snprintf(body, sizeof body, "{\"sensorStatus\":\"offline\",\"firmwareVersion\":\"" FIRMWARE_VERSION "\"%s}", co2);
   }
@@ -240,16 +267,18 @@ void loop() {
 
     float t = NAN, h = NAN, p = NAN;
     bool measured = false;
-    if (haveSensor && sensorAnswers() && bme.takeForcedMeasurement()) {
+    if (haveSensor && sensorKind == SensorKind::Sht3x) {
+      measured = readSht3x(sensorAddress, t, h);
+    } else if (haveSensor && sensorKind == SensorKind::Bme280 && bmeAnswers() && bme.takeForcedMeasurement()) {
       t = bme.readTemperature();
       h = bme.readHumidity();
       p = bme.readPressure() / 100.0F;
-      measured = sensorAnswers() && isfinite(t) && isfinite(h) && isfinite(p) &&
+      measured = bmeAnswers() && isfinite(t) && isfinite(h) && isfinite(p) &&
                  t >= -20 && t <= 70 && h >= 0 && h <= 100 && p >= 300 && p <= 1200;
     }
     if (!measured) {
-      haveSensor = false;  // Try both addresses again at the next report.
-      Serial.println("[bme] No valid reading; reporting sensor offline.");
+      haveSensor = false;  // Try sensor detection again at the next report.
+      Serial.println("[sensor] No valid SHT3x/BME280 reading; reporting sensor offline.");
     }
 
     lastPostOk = connectWifi();

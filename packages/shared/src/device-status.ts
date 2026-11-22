@@ -23,7 +23,7 @@ export function deviceStatus(device: DeviceContact, now = Date.now()) {
 export type Co2Status = Co2State | "unknown" | "not_installed" | "inactive";
 
 /**
- * CO2 sensor status, judged the same way as the BME280 but on its own:
+ * CO2 sensor status, judged the same way as the environmental sensor but on its own:
  * - "not_installed": no CO2 check or prior reading (may be running old firmware).
  * - "unknown": the board itself stopped reporting, so nothing is known about its CO2 sensor.
  * - otherwise the last state the board reported: online, warming_up or offline.

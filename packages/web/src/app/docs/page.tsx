@@ -63,7 +63,7 @@ export default function DocsPage() {
   "devices": [{
     "deviceId": "esp32-l21-prod-a",
     "label": "Sensor",
-    "firmwareVersion": "hitl-1.2.0",
+    "firmwareVersion": "hitl-1.4.0",
     "active": true,
     "status": "online",
     "lastSeenAt": "...",
@@ -73,7 +73,7 @@ export default function DocsPage() {
 }`}</CodeBlock>
         </Endpoint>
 
-        <Endpoint method="GET" path="/v1/sensor-status" description="Returns hardware status and last readings for the BME280 and optional CO₂ sensor.">
+        <Endpoint method="GET" path="/v1/sensor-status" description="Returns hardware status and last readings for the environmental sensor and optional CO₂ sensor.">
           <div className="api-subhead"><PanelHead title="Optional query" /></div>
           <p className="api-note"><code>?deviceId=esp32-l21-prod-a</code> filters the response to one sensor.</p>
           <CodeBlock>{`{
@@ -84,13 +84,13 @@ export default function DocsPage() {
   "sensors": [{
     "deviceId": "esp32-l21-prod-a",
     "label": "Sensor",
-    "firmwareVersion": "hitl-1.2.0",
+    "firmwareVersion": "hitl-1.4.0",
     "status": "online",
     "active": true,
     "lastReadingAt": "...",
     "temperatureC": 26.38,
     "humidityPct": 58.45,
-    "pressureHpa": 1005.7,
+    "pressureHpa": null,
     "co2": { "status": "online", "lastReadingAt": "...", "ppm": 413 },
     "rooms": ["L21"]
   }]
@@ -104,8 +104,8 @@ export default function DocsPage() {
           <dl className="api-definitions">
             <dt>ESP32 online</dt><dd>Active and in contact within 3 minutes.</dd>
             <dt>ESP32 offline</dt><dd>Active, with no contact for at least 3 minutes.</dd>
-            <dt>Sensor online</dt><dd>The connected ESP32 successfully read the BME280.</dd>
-            <dt>Sensor offline</dt><dd>The connected ESP32 could not read the BME280.</dd>
+            <dt>Sensor online</dt><dd>The connected ESP32 successfully read the environmental sensor.</dd>
+            <dt>Sensor offline</dt><dd>The connected ESP32 could not read the environmental sensor.</dd>
             <dt>Sensor unknown</dt><dd>The ESP32 is offline or has not reported a sensor check.</dd>
             <dt>CO₂</dt><dd>Reported separately. In addition to online, offline, unknown and inactive, CO₂ can be warming_up or not_installed (no CO₂ check reported by the connected firmware). The last ppm value can be historical.</dd>
             <dt>Inactive</dt><dd>Device is disabled in the admin.</dd>

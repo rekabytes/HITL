@@ -47,7 +47,7 @@ export function DeviceTimestamps({ data }: { data: PublicSensorStatus }) {
   const format = (value: string | null) => value ? new Date(value).toLocaleString() : "Never";
   return <div className="cell-sub">
     <div>Last heartbeat: {format(data.esp32.lastHeartbeatAt)}</div>
-    <div>Last BME280 reading: {format(data.sensor.lastReadingAt)}</div>
+    <div>Last environmental reading: {format(data.sensor.lastReadingAt)}</div>
   </div>;
 }
 
@@ -55,7 +55,7 @@ export function DeviceStatusCell({ deviceId, initial }: { deviceId: string; init
   const data = useDeviceStatus(deviceId, initial);
   return <>
     <div>ESP32 <DeviceBadge status={data?.esp32.status} /></div>
-    <div>BME280 <DeviceBadge status={data?.sensor.status} /></div>
+    <div>Environmental sensor <DeviceBadge status={data?.sensor.status} /></div>
     <div>CO₂ <DeviceBadge status={data?.co2.status} /></div>
     {data?.co2.ppm != null && data.co2.lastReadingAt && <div className="cell-sub">Last CO₂: {data.co2.ppm} ppm · {new Date(data.co2.lastReadingAt).toLocaleString()}</div>}
     {data && <DeviceTimestamps data={data} />}

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   if (!body.ok) return body.response;
 
   const report = body.data;
-  // The CO2 check is independent of the BME280: record it whatever the BME280 did.
+  // Record the CO2 check regardless of the environmental sensor status.
   const co2 = "sensorStatus" in report ? report.co2 : undefined;
   const co2Reply = co2 ? { co2Status: co2.status } : {};
   const { roomIds } = await ingestSensorReport(sensor, report);

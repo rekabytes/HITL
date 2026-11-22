@@ -202,7 +202,7 @@ export default async function RoomsPage() {
             </label>
             <label>
               Label
-              <input name="label" placeholder="BME280 near the door" />
+              <input name="label" placeholder="SHT3x near the door" />
             </label>
             <label>
               Rooms

@@ -12,7 +12,7 @@ export default async function SensorsPage() {
   const devices = await publicSensorStatuses();
   return <>
     <PageHeader eyebrow={{ icon: "cpu", text: "Monitor" }} title="Sensor status"
-      sub="ESP32 connectivity and BME280 checks are tracked separately. Status refreshes automatically." />
+      sub="ESP32 connectivity and environmental sensor checks (SHT3x or BME280) are tracked separately. Status refreshes automatically." />
     <section className="panel panel-flush">
       <div className="table-wrap">
         <LiveDeviceStatus>

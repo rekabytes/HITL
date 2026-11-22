@@ -20,6 +20,22 @@ for (const [co2, accepted] of [
   });
 }
 
+test("SHT3x reading with unavailable pressure is accepted", () => {
+  assert.equal(sensorReportInput.safeParse({
+    sensorStatus: "online",
+    firmwareVersion: "hitl-1.4.0",
+    reading: { temperature: 25.5, humidity: 59.8, pressure: null },
+    co2: { status: "online", ppm: 413 },
+  }).success, true);
+});
+
+test("versioned readings still validate numeric BME280 pressure", () => {
+  const report = { sensorStatus: "online", firmwareVersion: "hitl-1.3.0" };
+  const reading = { temperature: 25.5, humidity: 59.8 };
+  assert.equal(sensorReportInput.safeParse({ ...report, reading: { ...reading, pressure: 1013.2 } }).success, true);
+  assert.equal(sensorReportInput.safeParse({ ...report, reading: { ...reading, pressure: 0 } }).success, false);
+});
+
 test("legacy BME280 payload remains accepted", () => {
   assert.equal(sensorReportInput.safeParse({ temperature: 25, humidity: 57 }).success, true);
 });

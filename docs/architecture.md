@@ -1,7 +1,7 @@
 # Architecture
 
 ```
- ESP32 + BME280 ──POST /api/sensor──┐
+ ESP32 + SHT3x/BME280 ──POST /api/sensor──┐
                                      │
  Occupant PWA ◀──SSR /app, /r/:code──┤            ┌──────────┐
  (phone)      ──POST /api/feedback───┤            │  ml      │

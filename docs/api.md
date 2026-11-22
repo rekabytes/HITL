@@ -8,21 +8,21 @@ All bodies are JSON. Errors look like `{"error": "message"}`, and invalid bodies
 
 Header `X-Device-Key: <key>` (or `Authorization: Bearer <key>`).
 
-Current firmware reports every minute. A successful BME280 read sends:
+Current firmware reports every minute. A successful SHT3x read sends:
 
 ```json
-{ "sensorStatus": "online", "firmwareVersion": "hitl-1.2.0", "reading": { "temperature": 27.4, "humidity": 66.1, "pressure": 1008.2 } }
+{ "sensorStatus": "online", "firmwareVersion": "hitl-1.4.0", "reading": { "temperature": 27.4, "humidity": 66.1, "pressure": null } }
 ```
 
 If the hardware is unavailable, send a heartbeat without measurements:
 
 ```json
-{ "sensorStatus": "offline", "firmwareVersion": "hitl-1.2.0" }
+{ "sensorStatus": "offline", "firmwareVersion": "hitl-1.4.0" }
 ```
 
-The failure report returns `{"status":"heartbeat","sensorStatus":"offline"}` and stores no BME280 reading. A successful read returns `{"status":"stored","roomIds":["..."],"assigned":true}`; an assigned reading is stored once per room. Up to 120 reports per minute are accepted per device. Legacy flat reading bodies still work during rollout, but do not confirm BME280 health. The firmware requires pressure for a valid read; legacy requests may omit it.
+The failure report returns `{"status":"heartbeat","sensorStatus":"offline"}` and stores no temperature, humidity or pressure reading. A successful read returns `{"status":"stored","roomIds":["..."],"assigned":true}`; an assigned reading is stored once per room. Up to 120 reports per minute are accepted per device. Legacy flat reading bodies still work during rollout, but do not confirm sensor health. Temperature and humidity are required for an online report. BME280 firmware sends a numeric pressure in hPa; SHT3x firmware sends `null`. The API also accepts omitted pressure and stores it as `null`.
 
-A versioned report can also include `"co2":{"status":"online","ppm":413}` even if `sensorStatus` is `"offline"`. CO₂ requires an integer between 1 and 5000 ppm for `online`. Both `{"status":"warming_up"}` and `{"status":"offline"}` must omit `ppm` and do not store a CO₂ reading. Omit `co2` with BME280-only firmware. The heartbeat response category refers to BME280; it can still accompany a stored CO₂ measurement.
+A versioned report can also include `"co2":{"status":"online","ppm":413}` even if `sensorStatus` is `"offline"`. CO₂ requires an integer between 1 and 5000 ppm for `online`. Both `{"status":"warming_up"}` and `{"status":"offline"}` must omit `ppm` and do not store a CO₂ reading. Omit `co2` if the firmware does not monitor CO₂. The heartbeat response refers to the environmental sensor; it can still accompany a stored CO₂ measurement.
 
 ## Occupant app
 
@@ -68,12 +68,12 @@ These unauthenticated read-only endpoints are intended for backend monitoring. R
 |---|---|---|
 | `GET /v1/health` | Database, Redis, and ML service health | none |
 | `GET /v1/esp32-status` | ESP32 connectivity for all registered devices | optional `deviceId` |
-| `GET /v1/sensor-status` | BME280 and optional CO₂ hardware status for all registered devices | optional `deviceId` |
+| `GET /v1/sensor-status` | Environmental and optional CO₂ sensor status for all registered devices | optional `deviceId` |
 
 `deviceId` filters to one device. It returns `400` for invalid values and `404` when the device does not exist. Status endpoints return `503` when their database query fails.
 
-The ESP32 is `online` if its heartbeat is less than 3 minutes old, or if a legacy device was seen within that window. Other states are `offline`, `never_reported`, and `inactive`. The BME280 is `online` after a successful check or `offline` after a failed check while the board is online. It is `unknown` if the ESP32 is offline or has not explicitly reported sensor health, and `inactive` if disabled.
+The ESP32 is `online` if its heartbeat is less than 3 minutes old, or if a legacy device was seen within that window. Other states are `offline`, `never_reported`, and `inactive`. The environmental sensor is `online` after a successful check or `offline` after a failed check while the board is online. It is `unknown` if the ESP32 is offline or has not explicitly reported sensor health, and `inactive` if disabled.
 
 `/v1/esp32-status` exposes `lastSeenAt` and `lastHeartbeatAt`. `/v1/sensor-status` exposes `lastReadingAt` and the last explicitly reported real measurements; these are historical values, not proof of current health. The sensor endpoint's previous `healthy` and `stale` statuses and counters have been replaced by `online`, `offline`, and `unknown`.
 
-`/v1/sensor-status` also includes `co2: { status, lastReadingAt, ppm }` per device. Its existing `status` and `summary` still describe the BME280. The independent CO₂ status can be `online`, `warming_up`, `offline`, `unknown` (including after lost ESP32 contact), `inactive`, or `not_installed` (a connected device with no CO₂ check or reading; this does not prove that hardware is absent). `ppm` is the last stored reading or `null`, not necessarily a live value.
+`/v1/sensor-status` also includes `co2: { status, lastReadingAt, ppm }` per device. Its existing `status` and `summary` still describe the environmental sensor. The independent CO₂ status can be `online`, `warming_up`, `offline`, `unknown` (including after lost ESP32 contact), `inactive`, or `not_installed` (a connected device with no CO₂ check or reading; this does not prove that hardware is absent). `ppm` is the last stored reading or `null`, not necessarily a live value.
