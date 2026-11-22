@@ -89,20 +89,49 @@ bool startSensor() {
   return false;
 }
 
+// After a failed attempt: says whether the network is visible at all, and lists what is.
+void explainWifiFailure(wl_status_t status) {
+  if (status == WL_NO_SSID_AVAIL) {
+    Serial.printf("[wifi] Network \"%s\" not found.\n", WIFI_SSID);
+  } else if (status == WL_CONNECT_FAILED || status == WL_DISCONNECTED) {
+    Serial.println("[wifi] The network answered but refused us. Usually a wrong password.");
+  } else {
+    Serial.printf("[wifi] Could not connect (status %d).\n", status);
+  }
+  int n = WiFi.scanNetworks();
+  bool seen = false;
+  Serial.printf("[wifi] %d networks in range:\n", n);
+  for (int i = 0; i < n && i < 15; i++) {
+    bool match = WiFi.SSID(i) == WIFI_SSID;
+    seen |= match;
+    Serial.printf("[wifi]   %s%s  %d dBm  ch %d%s\n", match ? "> " : "  ", WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i),
+                  WiFi.encryptionType(i) == WIFI_AUTH_WPA2_ENTERPRISE ? "  (enterprise: not supported)" : "");
+  }
+  WiFi.scanDelete();
+  if (!seen) Serial.println("[wifi] Ours is not in the list: check the exact name (case and spaces), that it is 2.4 GHz, and the distance.");
+  else Serial.println("[wifi] Ours is in range, so check the password in config.h.");
+}
+
 bool connectWifi() {
   if (WiFi.status() == WL_CONNECTED) return true;
   Serial.printf("[wifi] Connecting to \"%s\"", WIFI_SSID);
+  // Start from a clean state; calling begin() while an attempt is running fails.
+  WiFi.disconnect(true);
+  delay(100);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
+  wl_status_t st = WiFi.status();
+  while (st != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
     delay(500);
     Serial.print(".");
+    st = WiFi.status();
+    if (st == WL_NO_SSID_AVAIL || st == WL_CONNECT_FAILED) break;  // no point waiting longer
   }
   Serial.println();
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[wifi] Could not connect. Is it a 2.4 GHz network with a plain password?");
+  if (st != WL_CONNECTED) {
+    explainWifiFailure(st);
     return false;
   }
   Serial.printf("[wifi] Connected, IP %s, signal %d dBm\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
