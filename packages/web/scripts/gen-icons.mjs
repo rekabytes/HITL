@@ -17,6 +17,8 @@ const ICONS = [
   "chevron-left", "chevron-right", "download", "edit-3", "external-link", "eye", "filter", "key",
   "lock", "log-in", "log-out", "mail", "phone", "play", "plus", "refresh-cw", "save", "send", "trash-2", "x",
   "user", "shield", "map-pin", "database", "server", "box",
+  // occupant app
+  "camera", "smartphone", "share", "list", "arrow-right", "hash", "upload-cloud", "maximize",
 ];
 
 const require = createRequire(import.meta.url);

@@ -14,9 +14,9 @@ Header `X-Device-Key: <key>` (or `Authorization: Bearer <key>`).
 
 `pressure` is optional. Returns `{"status": "stored", "roomIds": ["..."], "assigned": true}`; a sensor covering several rooms stores the reading once per room. Limited to 120 readings a minute per sensor.
 
-## Mobile app
+## Occupant app
 
-Sign in, then send `Authorization: Bearer <token>` on every call.
+The occupant app is the PWA in `packages/web` (`/app`, `/r/:code`). It signs in through the normal `/login` and `/signup` pages and calls these endpoints with the session cookie. Any other client (a script, a kiosk, a future native app) can sign in through the API instead and send `Authorization: Bearer <token>` on every call.
 
 | Method and path | Body | Returns |
 |---|---|---|
@@ -25,12 +25,14 @@ Sign in, then send `Authorization: Bearer <token>` on every call.
 | `POST /api/auth/password` | `{currentPassword, newPassword}` | `{status: "changed"}`; ends the user's other sessions |
 | `POST /api/auth/logout` | none | `{status: "signed_out"}` |
 | `GET /api/rooms` | none | `{items: [{code, name, building, floor}]}` |
-| `GET /api/rooms/:code` | none | Room details and current conditions, after a QR scan |
-| `POST /api/feedback` | `{roomCode, vote, comfortable, comment?}` | `201 {status, id, room}` |
+| `GET /api/rooms/:code` | none | `{code, name, building, floor, conditions}`; `conditions` is null when no sensor reported in the last 30 minutes |
+| `POST /api/feedback` | `{roomCode, vote, comfortable, comment?, votedAt?}` | `201 {status, id, room}` |
 
 `vote` is `too_cold`, `perfect` or `too_hot`. Votes are limited to 10 per user per 10 minutes.
 
-When `user.mustChangePassword` is true (an admin reset it), the app should send the user to change it.
+`votedAt` (ISO 8601) is for votes that were queued offline and sent later. The vote is stored at that time and paired with the room's readings from then, not from when it arrived, so late votes still train the model correctly. A `votedAt` in the future counts as now; one more than 7 days old is refused with 422.
+
+When `user.mustChangePassword` is true (an admin reset it), the client should send the user to change it.
 
 ## Staff
 
@@ -42,7 +44,7 @@ These accept the portal cookie or a staff bearer token.
 | `GET /api/stream` | staff | Server-sent events: `reading`, `feedback`, `alert` |
 | `GET /fm/feedback/export?room=&vote=&from=&to=` | staff | Feedback as CSV |
 | `POST /api/ml/retrain` | admin | Retrain the comfort model now |
-| `GET /admin/rooms/:id/qr` | admin | Printable SVG QR code for a room |
+| `GET /admin/rooms/:id/qr` | admin | Printable SVG QR code for a room. It holds `APP_URL/r/CODE` |
 
 ## Health
 

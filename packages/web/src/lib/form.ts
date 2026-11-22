@@ -16,6 +16,17 @@ export function optStr(form: FormData, name: string): string | null {
   return str(form, name) || null;
 }
 
+/**
+ * A same-site path to go to after sign-in, such as `/r/L21` from a scanned QR
+ * code. Anything else (other sites, `//host`, backslashes) is dropped.
+ */
+export function safeNext(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  if (!v.startsWith("/") || v.startsWith("//") || v.includes("\\")) return null;
+  return v.length <= 200 ? v : null;
+}
+
 /** Turns a unique-violation from Postgres into a readable message. */
 export function dbError(
   err: unknown,

@@ -7,7 +7,10 @@ import { findRoomByCode } from "@/lib/readings";
 
 export const dynamic = "force-dynamic";
 
-/** Mobile app: submit a vote for the room whose QR code was scanned. */
+/**
+ * Occupant app: submit a vote for the room whose QR code was scanned. Takes the
+ * session cookie (PWA) or a bearer token. `votedAt` marks a vote queued offline.
+ */
 export async function POST(req: Request) {
   const user = await apiUser(req);
   if (!user) return problem(401, "Sign in first");
@@ -18,7 +21,7 @@ export async function POST(req: Request) {
   if (!body.ok) return body.response;
 
   const result = await submitFeedback(body.data, user.id, "mobile");
-  if (!result.ok) return problem(404, result.error);
+  if (!result.ok) return problem(result.status, result.error);
   return json({ status: "stored", id: result.feedback.id, room: result.room.code }, 201);
 }
 

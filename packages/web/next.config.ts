@@ -9,6 +9,19 @@ const config: NextConfig = {
   poweredByHeader: false,
   // Keep the dev badge away from the sidebar user card.
   devIndicators: { position: "bottom-right" },
+  async headers() {
+    return [
+      {
+        // The browser must always check for a new service worker, never use a cached copy.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
 };
 
 export default config;

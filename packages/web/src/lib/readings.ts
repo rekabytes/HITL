@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
 import { buildings, feedback, rooms, sensorReadings, sensorRooms, sensors, type Room, type Sensor } from "@hitl/db";
 import { recommend, type FeedbackTally, type Recommendation, type SensorReadingInput } from "@hitl/shared";
 import { checkReadingAlerts, escalateStaleAlerts } from "./alerts";
@@ -121,6 +121,27 @@ export async function latestReading(roomId: string): Promise<LatestReading | nul
   const latest = await computeLatest(roomId);
   if (latest) await cached(() => redis().set(rkey.latest(roomId), JSON.stringify(latest), "EX", LATEST_TTL_SEC), null);
   return latest;
+}
+
+/**
+ * The room's conditions at a past moment, averaged the same way as the live
+ * value: each sensor's latest reading in the AVERAGE_WINDOW_MIN minutes up to
+ * `at`. Null when no sensor reported in that window. Used for votes that were
+ * queued offline and arrive late.
+ */
+export async function readingAt(roomId: string, at: Date): Promise<{ temperatureC: number; humidityPct: number } | null> {
+  const from = new Date(at.getTime() - AVERAGE_WINDOW_MIN * 60_000);
+  const rows = await db()
+    .selectDistinctOn([sensorReadings.sensorId], {
+      temperatureC: sensorReadings.temperatureC,
+      humidityPct: sensorReadings.humidityPct,
+    })
+    .from(sensorReadings)
+    .where(and(eq(sensorReadings.roomId, roomId), gt(sensorReadings.recordedAt, from), lte(sensorReadings.recordedAt, at)))
+    .orderBy(sensorReadings.sensorId, desc(sensorReadings.recordedAt));
+  if (rows.length === 0) return null;
+  const avg = (pick: (r: (typeof rows)[number]) => number) => rows.reduce((sum, r) => sum + pick(r), 0) / rows.length;
+  return { temperatureC: round(avg((r) => r.temperatureC), 2), humidityPct: round(avg((r) => r.humidityPct), 1) };
 }
 
 export function isFresh(r: LatestReading | null): r is LatestReading {

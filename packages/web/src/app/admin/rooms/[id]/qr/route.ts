@@ -3,11 +3,17 @@ import QRCode from "qrcode";
 import { rooms } from "@hitl/db";
 import { apiUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { problem } from "@/lib/http";
+import { roomPath } from "@/lib/room-code";
 
 export const dynamic = "force-dynamic";
 
-/** Printable SVG QR code holding the room code, for the door sign. */
+/**
+ * Printable SVG QR code for the door sign. It holds the room's vote URL
+ * (APP_URL/r/CODE), so any phone camera opens the vote screen directly. The
+ * in-app scanner also still reads old signs that hold only the code.
+ */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await apiUser(req);
   if (user?.role !== "admin") return problem(403, "Admin only");
@@ -17,7 +23,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const [room] = await db().select().from(rooms).where(eq(rooms.id, id)).limit(1);
   if (!room) return problem(404, "Room not found");
 
-  const qr = await QRCode.toString(room.code, { type: "svg", margin: 2, width: 512, errorCorrectionLevel: "M" });
+  const url = new URL(roomPath(room.code), env.appUrl).toString();
+  const qr = await QRCode.toString(url, { type: "svg", margin: 2, width: 512, errorCorrectionLevel: "M" });
   const label = room.code.replace(/[<&>]/g, "");
   // Add the code under the QR so people can type it if their camera fails.
   let size = 0;

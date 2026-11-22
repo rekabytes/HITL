@@ -45,6 +45,11 @@ export const feedbackInput = z.object({
   vote: z.enum(THERMAL_VOTES),
   comfortable: z.boolean(),
   comment: z.string().trim().max(1000).optional().default(""),
+  /**
+   * When the vote was cast, for votes queued offline and sent later. The server
+   * pairs the vote with the room conditions at this time instead of now.
+   */
+  votedAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type FeedbackInput = z.infer<typeof feedbackInput>;
 

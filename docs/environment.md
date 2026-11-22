@@ -7,7 +7,8 @@
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | compose | `hitl`, none, `hitl` | Postgres container |
 | `DATABASE_URL` | web, db scripts | none | Compose sets this for containers |
 | `REDIS_URL` | web | `redis://localhost:6379` | |
-| `APP_URL` | web | `http://localhost:3000` | Links in alert emails; `https://` turns on secure cookies |
+| `APP_URL` | web | `http://localhost:3000` | Links in alert emails and the URL inside room QR codes, so it must be the address phones reach. `https://` turns on secure cookies |
+| `NEXT_PUBLIC_PWA_DEV` | web (browser) | off | Set to `1` to register the service worker under `pnpm dev`. Off by default because it would cache code that hot reload replaces |
 | `AUTH_SECRET` | web | none | Keys the HMAC for sessions and device keys. At least 32 characters. Changing it signs everyone out and breaks every device key |
 | `ML_URL` | web | `http://localhost:8000` | |
 | `ML_TOKEN` | web, ml | none | Shared secret between the two |

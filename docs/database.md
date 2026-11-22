@@ -7,7 +7,7 @@ Postgres 17, schema in [`packages/db/src/schema.ts`](../packages/db/src/schema.t
 | `users` | Admins, facility managers and occupants. bcrypt hash, role, active flag, must-change-password flag |
 | `sessions` | Web and mobile sessions. Only an HMAC of the token is stored |
 | `buildings` | Buildings by unique name |
-| `rooms` | Rooms in a building. `code` (for example `L21`) is unique and is what the QR code holds |
+| `rooms` | Rooms in a building. `code` (for example `L21`) is unique and goes into the door QR code as `APP_URL/r/CODE` |
 | `sensors` | ESP32 units: device id, HMAC of the device key, label, firmware version, last seen |
 | `sensor_rooms` | Which rooms each sensor reports for. Usually one; a sensor in a shared space can cover several, and each reading is stored once per room |
 | `sensor_readings` | Temperature, humidity and pressure over time. Indexed by room and time |

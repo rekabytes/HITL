@@ -47,7 +47,7 @@ export default async function RoomsPage() {
       <PageHeader
         eyebrow={{ icon: "shield", text: "Setup" }}
         title="Rooms and sensors"
-        sub="Room codes go into the QR codes occupants scan. A sensor can report for one room or several."
+        sub="Each room's QR code opens its vote screen at APP_URL/r/CODE, so occupants can scan it with any phone camera. A sensor can report for one room or several."
       />
 
       <div className="grid grid-2">
@@ -107,7 +107,7 @@ export default async function RoomsPage() {
                   </select>
                 </label>
                 <label>
-                  Code (in the QR)
+                  Code (in the QR link)
                   <input name="code" required placeholder="L21" pattern="[A-Za-z0-9_\-]+" />
                 </label>
                 <label>
