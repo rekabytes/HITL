@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { asc, desc, eq } from "drizzle-orm";
 import { rooms, sensorReadings, sensorRooms, sensors } from "@hitl/db";
 import { Icon } from "@/components/Icon";
+import { SensorStatusModal } from "@/components/SensorStatusModal";
 import { Badge, EmptyRow, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -33,7 +34,6 @@ export default async function SensorsPage() {
     }),
   );
   const cutoff = Date.now() - ONLINE_MIN * 60_000;
-
   const onlineCount = sensorRows.filter((s) => s.active && s.lastSeenAt && s.lastSeenAt.getTime() > cutoff).length;
 
   return (
@@ -69,37 +69,28 @@ export default async function SensorsPage() {
                 return (
                   <tr key={s.id}>
                     <td>
-                      <div style={{ display: "flex", gap: "0.65rem", alignItems: "center" }}>
-                        <span className="stat-icon" style={{ width: 34, height: 34 }}>
-                          <Icon name="cpu" size={16} />
-                        </span>
-                        <div>
-                          <div className="cell-title">{s.deviceId}</div>
-                          <div className="cell-sub">
-                            {[s.label, s.firmwareVersion && `firmware ${s.firmwareVersion}`].filter(Boolean).join(" · ") || "No details"}
-                          </div>
-                        </div>
-                      </div>
+                      <SensorStatusModal
+                        deviceId={s.deviceId}
+                        label={s.label}
+                        firmwareVersion={s.firmwareVersion}
+                        rooms={codes}
+                        lastSeen={s.lastSeenAt?.toISOString() ?? null}
+                        online={s.active && online}
+                        temperature={l?.temperatureC ?? null}
+                        humidity={l?.humidityPct ?? null}
+                        pressure={l?.pressureHpa ?? null}
+                        lastReading={l?.recordedAt.toISOString() ?? null}
+                      />
                     </td>
                     <td>
                       {codes.length ? (
                         <div className="votes">
-                          {codes.map((c) => (
-                            <Badge key={c} icon="map-pin">{c}</Badge>
-                          ))}
+                          {codes.map((c) => <Badge key={c} icon="map-pin">{c}</Badge>)}
                         </div>
-                      ) : (
-                        <span className="faint small">Not assigned</span>
-                      )}
+                      ) : <span className="faint small">Not assigned</span>}
                     </td>
                     <td>
-                      {!s.active ? (
-                        <Badge dot>Off</Badge>
-                      ) : online ? (
-                        <Badge tone="ok" dot>Online</Badge>
-                      ) : (
-                        <Badge tone="danger" dot>Offline</Badge>
-                      )}
+                      {!s.active ? <Badge dot>Off</Badge> : online ? <Badge tone="ok" dot>Online</Badge> : <Badge tone="danger" dot>Offline</Badge>}
                       <div className="cell-sub" title={formatDateTime(s.lastSeenAt)}>{timeAgo(s.lastSeenAt)}</div>
                     </td>
                     <td className="small">
@@ -109,9 +100,7 @@ export default async function SensorsPage() {
                           <span className="nowrap"><Icon name="droplet" size={13} className="faint" /> {l.humidityPct.toFixed(0)}%</span>
                           {l.pressureHpa && <span className="nowrap"><Icon name="wind" size={13} className="faint" /> {l.pressureHpa.toFixed(0)} hPa</span>}
                         </div>
-                      ) : (
-                        <span className="faint">—</span>
-                      )}
+                      ) : <span className="faint">—</span>}
                     </td>
                   </tr>
                 );

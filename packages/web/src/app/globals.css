@@ -539,3 +539,78 @@ a.m-room-code:hover { text-decoration: none; color: var(--brand-700); }
 .m-offline .brand-text span { color: var(--muted); }
 .m-offline > .icon { color: var(--faint); }
 .m-offline p { line-height: 1.55; font-size: 0.92rem; }
+
+
+/* ---------- sensor status modal ---------- */
+.sensor-device-button {
+  display: inline-flex; align-items: center; gap: 0.65rem; width: 100%; padding: 0; border: 0; background: transparent;
+  color: inherit; text-align: left; cursor: pointer;
+}
+.sensor-device-button:hover .cell-title { color: var(--brand-700); }
+.sensor-device-button:focus-visible { outline: none; border-radius: var(--radius-sm); box-shadow: var(--ring); }
+.sensor-device-button > span:nth-child(2) { min-width: 0; }
+.sensor-device-chevron { margin-left: auto; color: var(--faint); }
+.sensor-modal-backdrop {
+  position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 1rem;
+  background: rgb(8 20 15 / 42%); animation: sensor-fade-in 0.15s ease-out;
+}
+.sensor-modal {
+  width: min(100%, 560px); max-height: calc(100vh - 2rem); overflow: auto; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgb(8 20 15 / 22%);
+  animation: sensor-rise 0.18s ease-out;
+}
+.sensor-modal-head { display: flex; justify-content: space-between; gap: 1rem; padding: 1.35rem 1.4rem 1.1rem; border-bottom: 1px solid var(--line); }
+.sensor-modal-head h2 { margin: 0.3rem 0 0; font-size: 1.35rem; }
+.sensor-modal-head .sub { margin: 0.25rem 0 0; }
+.icon-btn { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: #fff; color: var(--muted); cursor: pointer; }
+.icon-btn:hover { color: var(--ink); background: var(--panel-soft); }
+.icon-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.sensor-status-list { display: grid; gap: 0.65rem; padding: 1.1rem 1.4rem; background: var(--panel-soft); }
+.sensor-status-line { display: flex; align-items: center; gap: 0.7rem; padding: 0.75rem; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.sensor-status-icon { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; }
+.sensor-status-icon.is-online { background: var(--brand-50); color: var(--brand-700); }
+.sensor-status-icon.is-offline { background: var(--danger-50); color: var(--danger); }
+.sensor-status-copy { display: grid; gap: 0.12rem; flex: 1; min-width: 0; }
+.sensor-status-copy strong { font-size: 0.88rem; }
+.sensor-status-copy span { color: var(--muted); font-size: 0.77rem; overflow-wrap: anywhere; }
+.sensor-modal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem; padding: 1.25rem 1.4rem; }
+.sensor-modal-grid > div { display: grid; gap: 0.2rem; min-width: 0; }
+.sensor-modal-grid span { color: var(--muted); font-size: 0.75rem; }
+.sensor-modal-grid strong { color: var(--ink-2); font-size: 0.88rem; overflow-wrap: anywhere; }
+.sensor-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1.4rem 1.25rem; border-top: 1px solid var(--line); }
+.sensor-modal-foot > span { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.75rem; }
+@keyframes sensor-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sensor-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 560px) {
+  .sensor-status-line { align-items: flex-start; }
+  .sensor-status-line .badge { margin-left: auto; }
+  .sensor-modal-grid { grid-template-columns: 1fr 1fr; padding-left: 1rem; padding-right: 1rem; }
+  .sensor-modal-head, .sensor-status-list, .sensor-modal-foot { padding-left: 1rem; padding-right: 1rem; }
+  .sensor-modal-foot { align-items: flex-start; flex-direction: column; }
+}
+
+/* ---------- public API docs ---------- */
+.docs-page { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+.docs-page .page-header { margin-bottom: 1.4rem; }
+.docs-intro { display: grid; grid-template-columns: 1fr minmax(280px, 0.8fr); gap: 1.25rem; align-items: center; margin-bottom: 1.25rem; }
+.docs-intro h2 { margin: 0.8rem 0 0.3rem; }
+.docs-intro p, .api-description, .api-note { color: var(--muted); line-height: 1.55; }
+.api-endpoint { padding: 1.2rem 1.3rem; }
+.api-endpoint-head { margin-bottom: 1rem; }
+.api-method { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.api-method code { font-size: 0.96rem; background: transparent; border: 0; padding: 0; }
+.api-description { margin-top: 0.55rem; }
+.api-code { overflow-x: auto; margin: 0; padding: 1rem; border-radius: var(--radius); background: #10271f; color: #d9f5e9; font-size: 0.8rem; line-height: 1.65; }
+.api-code code { background: transparent; border: 0; padding: 0; color: inherit; font-size: inherit; }
+.api-note { margin-top: 0.85rem; font-size: 0.84rem; }
+.api-subhead { margin-bottom: 0.25rem; }
+.api-subhead .panel-head { margin-bottom: 0; }
+.api-definitions { display: grid; grid-template-columns: minmax(125px, 0.45fr) 1fr; gap: 0.7rem 1rem; margin: 0; font-size: 0.86rem; line-height: 1.45; }
+.api-definitions dt { color: var(--ink-2); font-weight: 650; }
+.api-definitions dd { color: var(--muted); margin: 0; }
+.docs-footnote { color: var(--faint); font-size: 0.82rem; line-height: 1.5; margin-top: 1.25rem; }
+@media (max-width: 700px) {
+  .docs-page { padding: 1.4rem 1rem 3rem; }
+  .docs-intro { grid-template-columns: 1fr; }
+  .api-code { font-size: 0.72rem; }
+}
