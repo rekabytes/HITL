@@ -12,6 +12,7 @@
 #include <HTTPClient.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
+#include "sc8-parser.h"
 
 #if __has_include("config.h")
 #include "config.h"
@@ -19,7 +20,24 @@
 #error "Copy config.example.h to config.h and fill in your Wi-Fi, ENDPOINT and DEVICE_KEY."
 #endif
 
-#define FIRMWARE_VERSION "hitl-1.2.0"
+#define FIRMWARE_VERSION "hitl-1.3.0"
+
+// Existing deployments remain BME280-only until CO2_RX_PIN is set in config.h.
+#ifdef CO2_RX_PIN
+HardwareSerial co2Serial(2);
+Sc8Parser co2Parser;
+Sc8Reading co2Reading;
+
+void pollCo2() {
+  // Bound the work even if the UART is noisy. The SC8 sends one 16-byte frame per second.
+  for (unsigned n = 0; n < 512 && co2Serial.available(); ++n) {
+    uint16_t ppm;
+    if (co2Parser.push(co2Serial.read(), ppm)) co2Reading.accept(ppm, millis());
+  }
+}
+#else
+void pollCo2() {}
+#endif
 
 // Onboard LED on most ESP32 DevKit boards. Blinks once per delivered report.
 #ifndef LED_PIN
@@ -110,7 +128,10 @@ bool connectWifi() {
   uint32_t start = millis();
   wl_status_t st = WiFi.status();
   while (st != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
-    delay(500);
+    for (unsigned i = 0; i < 10; ++i) {
+      pollCo2();
+      delay(50);
+    }
     Serial.print(".");
     st = WiFi.status();
     if (st == WL_NO_SSID_AVAIL || st == WL_CONNECT_FAILED) break;  // no point waiting longer
@@ -134,12 +155,31 @@ bool sensorAnswers() {
 
 // A failed sensor check is still a successful heartbeat if the portal accepts it.
 bool postReport(bool measured, float t, float h, float p) {
-  char body[192];
+  char body[256];
+  char co2[64] = "";
+#ifdef CO2_RX_PIN
+  switch (co2Reading.status(millis())) {
+    case Sc8Status::Online:
+      snprintf(co2, sizeof co2, ",\"co2\":{\"status\":\"online\",\"ppm\":%u}", unsigned(co2Reading.ppm));
+      break;
+    case Sc8Status::WarmingUp:
+      snprintf(co2, sizeof co2, ",\"co2\":{\"status\":\"warming_up\"}");
+      break;
+    case Sc8Status::Offline:
+      snprintf(co2, sizeof co2, ",\"co2\":{\"status\":\"offline\"}");
+      break;
+  }
+#endif
+  int length;
   if (measured) {
-    snprintf(body, sizeof body, "{\"sensorStatus\":\"online\",\"firmwareVersion\":\"" FIRMWARE_VERSION
-             "\",\"reading\":{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.1f}}", t, h, p);
+    length = snprintf(body, sizeof body, "{\"sensorStatus\":\"online\",\"firmwareVersion\":\"" FIRMWARE_VERSION
+                      "\",\"reading\":{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.1f}%s}", t, h, p, co2);
   } else {
-    snprintf(body, sizeof body, "{\"sensorStatus\":\"offline\",\"firmwareVersion\":\"" FIRMWARE_VERSION "\"}");
+    length = snprintf(body, sizeof body, "{\"sensorStatus\":\"offline\",\"firmwareVersion\":\"" FIRMWARE_VERSION "\"%s}", co2);
+  }
+  if (length < 0 || size_t(length) >= sizeof body) {
+    Serial.println("[post] Report did not fit in the JSON buffer.");
+    return false;
   }
 
   HTTPClient http;
@@ -178,6 +218,10 @@ void setup() {
   delay(300);
   Serial.printf("\nHITL sensor %s\n", FIRMWARE_VERSION);
 
+#ifdef CO2_RX_PIN
+  // Receive-only: sending a query would switch off automatic output until power cycle.
+  co2Serial.begin(9600, SERIAL_8N1, CO2_RX_PIN, -1);
+#endif
   Wire.begin(21, 22);
   Wire.setTimeOut(50);
   connectWifi();
@@ -186,6 +230,7 @@ void setup() {
 }
 
 void loop() {
+  pollCo2();
   uint32_t now = millis();
   uint32_t wait = lastPostOk ? POST_INTERVAL_S * 1000UL : RETRY_MS;
 
@@ -207,7 +252,11 @@ void loop() {
       Serial.println("[bme] No valid reading; reporting sensor offline.");
     }
 
-    lastPostOk = connectWifi() && postReport(measured, t, h, p);
+    lastPostOk = connectWifi();
+    if (lastPostOk) {
+      pollCo2();
+      lastPostOk = postReport(measured, t, h, p);
+    }
     if (lastPostOk) {
       lastSuccessAt = millis();
       blink(1);

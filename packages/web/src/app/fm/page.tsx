@@ -34,6 +34,7 @@ export default async function FmDashboard() {
     humidityPct: s.latest?.humidityPct ?? null,
     recordedAt: s.latest?.recordedAt ?? null,
     sensorCount: s.latest?.sensorCount ?? 0,
+    co2: s.co2,
     level: s.recommendation?.level ?? "none",
     advice: s.recommendation && s.recommendation.level !== "ok" ? (s.recommendation.items[0] ?? null) : null,
     votes: s.tally,
@@ -55,7 +56,7 @@ export default async function FmDashboard() {
         sub="Live room conditions next to what occupants are saying."
       />
       <div className="stats">
-        <Stat icon="wifi" label="Rooms reporting" value={live.length} unit={`/ ${statuses.length}`} />
+        <Stat icon="wifi" label="Rooms reporting" value={statuses.filter((s) => s.fresh || s.co2Fresh).length} unit={`/ ${statuses.length}`} />
         <Stat icon="thermometer" label="Avg temperature" value={avg((s) => s.latest!.temperatureC)} unit="°C" />
         <Stat icon="droplet" label="Avg humidity" value={avg((s) => s.latest!.humidityPct)} unit="%" tone="cold" />
         <Stat

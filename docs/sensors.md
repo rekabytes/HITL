@@ -55,3 +55,7 @@ A large room can have more than one sensor. The room's current temperature and h
 An ESP32 is online when it sent a heartbeat in the last 3 minutes. A failed BME280 check shows Sensor Offline while the ESP32 stays Online. If the ESP32 falls offline, the sensor status becomes Unknown. The separate room alert still checks for 30 minutes without device contact when staff open the FM dashboard or Alerts page.
 
 Deleting a sensor keeps its past readings. Deleting a room removes everything recorded for it, so the portal asks you to type the room code first.
+
+## Optional CO₂ monitoring
+
+The ESP32 can monitor the SC8-CO2-5K independently from the BME280. See the [firmware wiring and rollout instructions](../firmware/README.md#optional-sc8-co2-5k-sensor). The admin and FM sensor pages show CO₂ status separately. The FM dashboard shows current ppm from online sensors, and Analytics shows historical ppm. The public `/v1/sensor-status` response exposes both the CO₂ state and its last stored measurement.

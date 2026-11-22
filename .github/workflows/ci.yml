@@ -22,7 +22,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: node --experimental-strip-types --test packages/shared/tests/device-status.test.mjs
+      - run: node --experimental-strip-types --test packages/shared/tests/*.test.mjs
+      - run: g++ -std=c++11 -Wall -Wextra -Werror firmware/tests/sc8-parser.test.cpp -o /tmp/sc8-parser-test && /tmp/sc8-parser-test
       - run: pnpm --filter @hitl/web build
         env:
           NEXT_TELEMETRY_DISABLED: "1"

@@ -1,11 +1,19 @@
 import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
-import { buildings, feedback, rooms, sensorReadings, sensorRooms, sensors, type Room, type Sensor } from "@hitl/db";
-import { recommend, type FeedbackTally, type Recommendation, type SensorReadingInput } from "@hitl/shared";
-import { checkReadingAlerts, escalateStaleAlerts } from "./alerts";
+import { buildings, co2Readings, feedback, rooms, sensorReadings, sensorRooms, sensors, type Room, type Sensor } from "@hitl/db";
+import {
+  co2Advice,
+  ESP32_ONLINE_MIN,
+  recommend,
+  type sensorReportInput,
+  type FeedbackTally,
+  type Recommendation,
+} from "@hitl/shared";
+import { checkCo2Alerts, checkReadingAlerts, escalateStaleAlerts } from "./alerts";
 import { db } from "./db";
 import { env } from "./env";
 import { predict, type Prediction } from "./ml";
 import { cached, publish, redis, rkey } from "./redis";
+import type { z } from "zod";
 import { hourIn } from "./time";
 
 export interface LatestReading {
@@ -80,47 +88,101 @@ async function computeLatest(roomId: string): Promise<LatestReading | null> {
   };
 }
 
-/** Records contact even when the BME280 cannot provide a measurement. */
-export async function recordSensorFailure(sensor: Sensor, firmwareVersion: string) {
-  const now = new Date();
-  await db().update(sensors).set({
-    lastSeenAt: now, lastHeartbeatAt: now, sensorResponding: false, firmwareVersion,
-  }).where(eq(sensors.id, sensor.id));
+export interface LatestCo2 {
+  roomId: string;
+  co2Ppm: number;
+  /** Time of the oldest CO2 reading contributing to the average; used for freshness. */
+  recordedAt: string;
+  sensorCount: number;
 }
 
-/** Stores a reading and its device status together, then updates caches and alerts. */
-export async function ingestReading(sensor: Sensor, input: SensorReadingInput, firmwareVersion?: string) {
-  const recordedAt = new Date();
-  const roomIds = await sensorRoomIds(sensor.id);
-  const base = {
-    sensorId: sensor.id,
-    temperatureC: input.temperature,
-    humidityPct: input.humidity,
-    pressureHpa: input.pressure ?? null,
-    recordedAt,
+/** Room CO2 averages use only recently reporting, currently online sensors. */
+export async function latestCo2(roomId: string): Promise<LatestCo2 | null> {
+  const cutoff = new Date(Date.now() - ESP32_ONLINE_MIN * 60_000);
+  const rows = await db()
+    .selectDistinctOn([co2Readings.sensorId], { co2Ppm: co2Readings.co2Ppm, recordedAt: co2Readings.recordedAt })
+    .from(co2Readings)
+    .innerJoin(sensors, and(eq(sensors.id, co2Readings.sensorId), eq(sensors.lastCo2ReadingAt, co2Readings.recordedAt)))
+    .innerJoin(sensorRooms, and(eq(sensorRooms.sensorId, sensors.id), eq(sensorRooms.roomId, co2Readings.roomId)))
+    .where(and(eq(co2Readings.roomId, roomId), eq(sensors.active, true), eq(sensors.co2State, "online"), gt(co2Readings.recordedAt, cutoff)))
+    .orderBy(co2Readings.sensorId);
+  if (rows.length === 0) return null;
+  return {
+    roomId,
+    co2Ppm: Math.round(rows.reduce((sum, r) => sum + r.co2Ppm, 0) / rows.length),
+    // Expire the aggregate when its oldest contributing sample expires.
+    recordedAt: new Date(Math.min(...rows.map((r) => r.recordedAt.getTime()))).toISOString(),
+    sensorCount: rows.length,
   };
-  await db().transaction(async (tx) => {
-    await tx.update(sensors).set(firmwareVersion ? {
-      lastSeenAt: recordedAt, lastHeartbeatAt: recordedAt, sensorResponding: true,
-      lastRealReadingAt: recordedAt, firmwareVersion,
-    } : { lastSeenAt: recordedAt }).where(eq(sensors.id, sensor.id));
-    await tx.insert(sensorReadings)
-      .values(roomIds.length ? roomIds.map((roomId) => ({ ...base, roomId })) : [{ ...base, roomId: null }]);
+}
+
+export function isCo2Fresh(c: LatestCo2 | null): c is LatestCo2 {
+  return !!c && Date.now() - new Date(c.recordedAt).getTime() < ESP32_ONLINE_MIN * 60_000;
+}
+
+/** Persist both sensor states and any measurements in one transaction. */
+export async function ingestSensorReport(sensor: Sensor, report: z.infer<typeof sensorReportInput>) {
+  const recordedAt = new Date();
+  const checked = "sensorStatus" in report ? report : null;
+  const co2 = checked?.co2;
+  const reading = "sensorStatus" in report ? (report.sensorStatus === "online" ? report.reading : null) : report;
+  const roomIds = await db().transaction(async (tx) => {
+    // Serialize reports from this device before assigning the shared timestamp.
+    const [current] = await tx.select({ co2State: sensors.co2State }).from(sensors).where(eq(sensors.id, sensor.id)).for("update");
+    const roomIds = (await tx.select({ roomId: sensorRooms.roomId }).from(sensorRooms).where(eq(sensorRooms.sensorId, sensor.id)))
+      .map((row) => row.roomId);
+    const destinations = roomIds.length ? roomIds : [null];
+    recordedAt.setTime(Date.now());
+    await tx.update(sensors).set({
+      lastSeenAt: recordedAt,
+      co2State: co2?.status ?? null,
+      ...(checked && {
+        lastHeartbeatAt: recordedAt,
+        sensorResponding: !!reading,
+        firmwareVersion: checked.firmwareVersion,
+        ...(reading && { lastRealReadingAt: recordedAt }),
+      }),
+      ...(co2?.status === "online" && { lastCo2ReadingAt: recordedAt }),
+    }).where(eq(sensors.id, sensor.id));
+    if (reading) {
+      await tx.insert(sensorReadings).values(destinations.map((roomId) => ({
+        sensorId: sensor.id, roomId, recordedAt, temperatureC: reading.temperature,
+        humidityPct: reading.humidity, pressureHpa: reading.pressure ?? null,
+      })));
+    }
+    if (co2?.status === "online") {
+      await tx.insert(co2Readings).values(destinations.map((roomId) => ({
+        sensorId: sensor.id, roomId, recordedAt, co2Ppm: co2.ppm,
+      })));
+    }
+    return { ids: roomIds, co2Changed: Boolean(co2 || current?.co2State) };
   });
 
-  for (const roomId of roomIds) {
-    // Recompute the room average with this reading in it; alerts and the live feed use the average.
-    const latest = await computeLatest(roomId);
-    if (!latest) continue;
-    await cached(
-      () => redis().multi().set(rkey.latest(roomId), JSON.stringify(latest), "EX", LATEST_TTL_SEC).del(rkey.status(roomId)).exec(),
-      null,
-    );
-    await publish({ type: "reading", ...latest });
-    await checkReadingAlerts(roomId, latest.temperatureC, latest.humidityPct);
+  // Measurements are already committed. A derived update failure must not make
+  // the device retry the same write and store duplicate measurements.
+  try {
+    for (const roomId of roomIds.ids) {
+      if (roomIds.co2Changed) {
+        const latest = await latestCo2(roomId);
+        await publish({ type: "co2", roomId, reading: latest });
+        if (latest && co2?.status === "online") await checkCo2Alerts(roomId, latest.co2Ppm);
+      }
+      if (reading) {
+        const latest = await computeLatest(roomId);
+        if (!latest) continue;
+        await cached(
+          () => redis().multi().set(rkey.latest(roomId), JSON.stringify(latest), "EX", LATEST_TTL_SEC).del(rkey.status(roomId)).exec(),
+          null,
+        );
+        await publish({ type: "reading", ...latest });
+        await checkReadingAlerts(roomId, latest.temperatureC, latest.humidityPct);
+      }
+    }
+    if (reading || co2?.status === "online") await escalateStaleAlerts();
+  } catch (err) {
+    console.warn("[sensor] Report stored, but derived updates failed:", err instanceof Error ? err.name : "unknown error");
   }
-  await escalateStaleAlerts();
-  return { roomIds };
+  return { roomIds: roomIds.ids };
 }
 
 export async function latestReading(roomId: string): Promise<LatestReading | null> {
@@ -195,9 +257,26 @@ export interface RoomStatus {
   room: RoomRow;
   latest: LatestReading | null;
   fresh: boolean;
+  /** Latest CO2, or null when the room has no CO2 sensor yet. Check `co2Fresh` before advising on it. */
+  co2: LatestCo2 | null;
+  co2Fresh: boolean;
   tally: FeedbackTally;
   recommendation: Recommendation | null;
   prediction: Prediction | null;
+}
+
+/**
+ * Adds CO2 advice to the temperature and humidity advice. Works when only one
+ * of the two sensors is reporting: either part can be missing.
+ */
+function withCo2(rec: Recommendation | null, co2Ppm: number | null): Recommendation | null {
+  if (co2Ppm === null) return rec;
+  const adv = co2Advice(co2Ppm, env.bands);
+  if (!adv) return rec ?? { level: "ok", items: [`CO₂ is ${co2Ppm} ppm, below the ventilation advisory threshold.`] };
+  if (!rec || rec.level === "ok") return { level: adv.level, items: [adv.item] };
+  const level = rec.level === "action" || adv.level === "action" ? "action" : "advice";
+  // The more urgent problem goes first, because the dashboard card shows only the first item.
+  return { level, items: adv.level === "action" && rec.level !== "action" ? [adv.item, ...rec.items] : [...rec.items, adv.item] };
 }
 
 /** Room overview for the dashboard and recommendations page. Cached per room for 30 s. */
@@ -207,13 +286,15 @@ export async function roomStatuses(opts: { withPrediction?: boolean } = {}): Pro
 
   const base = await Promise.all(
     roomList.map(async (room) => {
-      const latest = await latestReading(room.id);
+      const [latest, co2] = await Promise.all([latestReading(room.id), latestCo2(room.id)]);
       const fresh = isFresh(latest);
+      const co2Fresh = isCo2Fresh(co2);
       const tally = tallies.get(room.id) ?? empty;
-      const recommendation = fresh
+      const base = fresh
         ? recommend({ temperatureC: latest.temperatureC, humidityPct: latest.humidityPct, bands: env.bands, recent: tally })
         : null;
-      return { room, latest, fresh, tally, recommendation, prediction: null as Prediction | null };
+      const recommendation = withCo2(base, co2Fresh ? co2.co2Ppm : null);
+      return { room, latest, fresh, co2, co2Fresh, tally, recommendation, prediction: null as Prediction | null };
     }),
   );
   if (!opts.withPrediction) return base;

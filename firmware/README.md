@@ -59,3 +59,16 @@ networkingMode=mirrored
 ```
 
 Then use `http://<laptop Wi-Fi IP>:3000/api/sensor` as `ENDPOINT`.
+
+## Optional SC8-CO2-5K sensor
+
+Deploy the updated backend and apply migration `0005_co2_sensor` before flashing `hitl-1.3.0`. In the private `hitl-sensor/config.h`, add `#define CO2_RX_PIN 16` to enable the module. Leave this undefined on boards without the module.
+
+| SC8-CO2-5K pin | Connect to ESP32 |
+| --- | --- |
+| 6 (+5 V) | Regulated 5 V supply (rated for at least 150 mA for the sensor) |
+| 7 (GND) | GND, common to the ESP32 |
+| 3 (TX, 3.3 V logic) | GPIO 16 (or the configured UART RX) |
+| 2 (RX) | Leave unconnected; the module broadcasts automatically |
+
+Keep the module away from the BME280 to avoid biasing temperature readings. Power-cycle the module if earlier testing switched it to query mode. The firmware waits for three minutes of valid frames before publishing ppm (full accuracy takes about ten minutes after power-on). It reports `warming_up` without ppm during warm-up, and `offline` after five seconds without a valid frame. CO₂ and BME280 measurements are independent; no simulated values are sent.

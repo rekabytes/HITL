@@ -20,7 +20,9 @@ If the hardware is unavailable, send a heartbeat without measurements:
 { "sensorStatus": "offline", "firmwareVersion": "hitl-1.2.0" }
 ```
 
-The failure report returns `{"status":"heartbeat","sensorStatus":"offline"}` and stores no reading. A successful read returns `{"status":"stored","roomIds":["..."],"assigned":true}`; an assigned reading is stored once per room. Up to 120 reports per minute are accepted per device. Legacy flat reading bodies still work during rollout, but do not confirm BME280 health. The firmware requires pressure for a valid read; legacy requests may omit it.
+The failure report returns `{"status":"heartbeat","sensorStatus":"offline"}` and stores no BME280 reading. A successful read returns `{"status":"stored","roomIds":["..."],"assigned":true}`; an assigned reading is stored once per room. Up to 120 reports per minute are accepted per device. Legacy flat reading bodies still work during rollout, but do not confirm BME280 health. The firmware requires pressure for a valid read; legacy requests may omit it.
+
+A versioned report can also include `"co2":{"status":"online","ppm":413}` even if `sensorStatus` is `"offline"`. CO₂ requires an integer between 1 and 5000 ppm for `online`. Both `{"status":"warming_up"}` and `{"status":"offline"}` must omit `ppm` and do not store a CO₂ reading. Omit `co2` with BME280-only firmware. The heartbeat response category refers to BME280; it can still accompany a stored CO₂ measurement.
 
 ## Occupant app
 
@@ -49,7 +51,7 @@ These accept the portal cookie or a staff bearer token.
 | Method and path | Who | What |
 |---|---|---|
 | `GET /api/feedback?room=&vote=&limit=&offset=` | staff | Feedback list |
-| `GET /api/stream` | staff | Server-sent events: `reading`, `feedback`, `alert` |
+| `GET /api/stream` | staff | Server-sent events: `reading`, `co2`, `feedback`, `alert` |
 | `GET /fm/feedback/export?room=&vote=&from=&to=` | staff | Feedback as CSV |
 | `POST /api/ml/retrain` | admin | Retrain the comfort model now |
 | `GET /admin/rooms/:id/qr` | admin | Printable SVG QR code for a room. It holds `APP_URL/r/CODE` |
@@ -66,10 +68,12 @@ These unauthenticated read-only endpoints are intended for backend monitoring. R
 |---|---|---|
 | `GET /v1/health` | Database, Redis, and ML service health | none |
 | `GET /v1/esp32-status` | ESP32 connectivity for all registered devices | optional `deviceId` |
-| `GET /v1/sensor-status` | BME280 hardware status for all registered devices | optional `deviceId` |
+| `GET /v1/sensor-status` | BME280 and optional CO₂ hardware status for all registered devices | optional `deviceId` |
 
 `deviceId` filters to one device. It returns `400` for invalid values and `404` when the device does not exist. Status endpoints return `503` when their database query fails.
 
 The ESP32 is `online` if its heartbeat is less than 3 minutes old, or if a legacy device was seen within that window. Other states are `offline`, `never_reported`, and `inactive`. The BME280 is `online` after a successful check or `offline` after a failed check while the board is online. It is `unknown` if the ESP32 is offline or has not explicitly reported sensor health, and `inactive` if disabled.
 
 `/v1/esp32-status` exposes `lastSeenAt` and `lastHeartbeatAt`. `/v1/sensor-status` exposes `lastReadingAt` and the last explicitly reported real measurements; these are historical values, not proof of current health. The sensor endpoint's previous `healthy` and `stale` statuses and counters have been replaced by `online`, `offline`, and `unknown`.
+
+`/v1/sensor-status` also includes `co2: { status, lastReadingAt, ppm }` per device. Its existing `status` and `summary` still describe the BME280. The independent CO₂ status can be `online`, `warming_up`, `offline`, `unknown` (including after lost ESP32 contact), `inactive`, or `not_installed` (a connected device with no CO₂ check or reading; this does not prove that hardware is absent). `ppm` is the last stored reading or `null`, not necessarily a live value.

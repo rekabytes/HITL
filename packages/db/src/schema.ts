@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_STATUSES, ROLES, THERMAL_VOTES } from "@hitl/shared";
+import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_STATUSES, CO2_STATES, ROLES, THERMAL_VOTES } from "@hitl/shared";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -88,6 +88,9 @@ export const sensors = pgTable("sensors", {
   lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
   sensorResponding: boolean("sensor_responding"),
   lastRealReadingAt: timestamp("last_real_reading_at", { withTimezone: true }),
+  /** CO2 state in the most recent report. Null if that report omitted CO2. */
+  co2State: text("co2_state", { enum: CO2_STATES }),
+  lastCo2ReadingAt: timestamp("last_co2_reading_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -123,6 +126,26 @@ export const sensorReadings = pgTable(
   (t) => [
     index("readings_room_time_idx").on(t.roomId, t.recordedAt.desc()),
     index("readings_time_idx").on(t.recordedAt),
+  ],
+);
+
+/**
+ * CO2 readings, kept apart from sensor_readings so a working CO2 sensor is
+ * still recorded while the BME280 on the same board is failing (and the
+ * other way round). Stored once per room the sensor covers, like readings.
+ */
+export const co2Readings = pgTable(
+  "co2_readings",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    sensorId: uuid("sensor_id").references(() => sensors.id, { onDelete: "set null" }),
+    roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }),
+    co2Ppm: integer("co2_ppm").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("co2_readings_room_time_idx").on(t.roomId, t.recordedAt.desc()),
+    index("co2_readings_time_idx").on(t.recordedAt),
   ],
 );
 
@@ -245,6 +268,7 @@ export type Room = typeof rooms.$inferSelect;
 export type Building = typeof buildings.$inferSelect;
 export type Sensor = typeof sensors.$inferSelect;
 export type SensorReading = typeof sensorReadings.$inferSelect;
+export type Co2Reading = typeof co2Readings.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
 export type Pic = typeof pics.$inferSelect;

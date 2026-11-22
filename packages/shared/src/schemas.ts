@@ -13,7 +13,7 @@ export const THERMAL_VOTE_LABELS: Record<ThermalVote, string> = {
   too_hot: "Too hot",
 };
 
-export const ALERT_KINDS = ["temperature", "humidity", "feedback", "sensor_offline", "manual"] as const;
+export const ALERT_KINDS = ["temperature", "humidity", "feedback", "sensor_offline", "manual", "co2"] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;
@@ -39,11 +39,27 @@ export const sensorReadingInput = z.object({
 });
 export type SensorReadingInput = z.infer<typeof sensorReadingInput>;
 
+/**
+ * CO2 sensor check, sent next to the BME280 status by boards that have a CO2
+ * sensor (NDIR, for example the SC8-CO2-5K). Boards without one leave it out.
+ * "warming_up": the sensor answers but is inside its preheat time, so the
+ * value is not trustworthy yet and is not sent.
+ */
+export const CO2_STATES = ["online", "warming_up", "offline"] as const;
+export type Co2State = (typeof CO2_STATES)[number];
+export const co2ReportInput = z.discriminatedUnion("status", [
+  z.strictObject({ status: z.literal("online"), ppm: z.number().int().min(1).max(5000) }),
+  z.strictObject({ status: z.literal("warming_up") }),
+  z.strictObject({ status: z.literal("offline") }),
+]);
+export type Co2ReportInput = z.infer<typeof co2ReportInput>;
+
 // An online report must carry a real reading; an offline report cannot carry one.
+// The CO2 check is independent of the BME280: either can work while the other fails.
 export const sensorReportInput = z.union([
   z.discriminatedUnion("sensorStatus", [
-    z.strictObject({ sensorStatus: z.literal("online"), firmwareVersion: z.string().min(1).max(64), reading: sensorReadingInput.extend({ pressure: z.number().min(300).max(1200) }).strict() }),
-    z.strictObject({ sensorStatus: z.literal("offline"), firmwareVersion: z.string().min(1).max(64) }),
+    z.strictObject({ sensorStatus: z.literal("online"), firmwareVersion: z.string().min(1).max(64), reading: sensorReadingInput.extend({ pressure: z.number().min(300).max(1200) }).strict(), co2: co2ReportInput.optional() }),
+    z.strictObject({ sensorStatus: z.literal("offline"), firmwareVersion: z.string().min(1).max(64), co2: co2ReportInput.optional() }),
   ]),
   sensorReadingInput.strict(),
 ]);

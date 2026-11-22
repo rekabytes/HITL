@@ -55,5 +55,6 @@ export type LiveEvent =
       recordedAt: string;
       sensorCount: number;
     }
+  | { type: "co2"; roomId: string; reading: { co2Ppm: number; recordedAt: string; sensorCount: number } | null }
   | { type: "feedback"; roomId: string; vote: string; createdAt: string }
   | { type: "alert"; roomId: string | null; kind: string; severity: string; message: string };

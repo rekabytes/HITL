@@ -37,17 +37,17 @@ export function useDeviceStatus(deviceId: string, initial?: PublicSensorStatus) 
   return snapshot === undefined ? initial : snapshot && Object.hasOwn(snapshot, deviceId) ? snapshot[deviceId] : null;
 }
 
-export function DeviceBadge({ status }: { status?: PublicSensorStatus["esp32"]["status"] | PublicSensorStatus["sensor"]["status"] }) {
+export function DeviceBadge({ status }: { status?: PublicSensorStatus["esp32"]["status"] | PublicSensorStatus["sensor"]["status"] | PublicSensorStatus["co2"]["status"] }) {
   if (!status) return <Badge tone="warn">Unavailable</Badge>;
-  const text = { online: "Online", offline: "Offline", inactive: "Off", unknown: "Unknown", never_reported: "Never reported" };
-  return <Badge dot tone={status === "online" ? "ok" : status === "offline" ? "danger" : undefined}>{text[status]}</Badge>;
+  const text = { online: "Online", offline: "Offline", inactive: "Off", unknown: "Unknown", never_reported: "Never reported", warming_up: "Warming up", not_installed: "Not reported" };
+  return <Badge dot tone={status === "online" ? "ok" : status === "offline" ? "danger" : status === "warming_up" ? "warn" : undefined}>{text[status]}</Badge>;
 }
 
 export function DeviceTimestamps({ data }: { data: PublicSensorStatus }) {
   const format = (value: string | null) => value ? new Date(value).toLocaleString() : "Never";
   return <div className="cell-sub">
     <div>Last heartbeat: {format(data.esp32.lastHeartbeatAt)}</div>
-    <div>Last real reading: {format(data.sensor.lastReadingAt)}</div>
+    <div>Last BME280 reading: {format(data.sensor.lastReadingAt)}</div>
   </div>;
 }
 
@@ -56,6 +56,8 @@ export function DeviceStatusCell({ deviceId, initial }: { deviceId: string; init
   return <>
     <div>ESP32 <DeviceBadge status={data?.esp32.status} /></div>
     <div>BME280 <DeviceBadge status={data?.sensor.status} /></div>
+    <div>CO₂ <DeviceBadge status={data?.co2.status} /></div>
+    {data?.co2.ppm != null && data.co2.lastReadingAt && <div className="cell-sub">Last CO₂: {data.co2.ppm} ppm · {new Date(data.co2.lastReadingAt).toLocaleString()}</div>}
     {data && <DeviceTimestamps data={data} />}
   </>;
 }

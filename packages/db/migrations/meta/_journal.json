@@ -36,6 +36,13 @@
       "when": 1795349891954,
       "tag": "0004_device_heartbeat",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795352404899,
+      "tag": "0005_co2_sensor",
+      "breakpoints": true
     }
   ]
 }

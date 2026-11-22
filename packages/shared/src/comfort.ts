@@ -5,15 +5,43 @@ export interface ComfortBands {
   tempMaxC: number;
   humidityMinPct: number;
   humidityMaxPct: number;
+  /** CO2 above this: ventilation is falling behind, advise more fresh air. */
+  co2WarnPpm: number;
+  /** CO2 above this: poor air, raise an alert. */
+  co2HighPpm: number;
 }
 
-/** Tropical defaults: Malaysian offices are usually set around 24 °C. */
+/**
+ * Tropical defaults: Malaysian offices are usually set around 24 °C.
+ * CO2: outdoor air is about 420 ppm; 1000 ppm is the common "ventilate more"
+ * guideline for occupied rooms, and above 1500 ppm people report stuffiness
+ * and drowsiness.
+ */
 export const DEFAULT_BANDS: ComfortBands = {
   tempMinC: 23,
   tempMaxC: 26,
   humidityMinPct: 40,
   humidityMaxPct: 70,
+  co2WarnPpm: 1000,
+  co2HighPpm: 1500,
 };
+
+/** Advice for a room's current CO2 level, or null when the air is fine. */
+export function co2Advice(co2Ppm: number, bands: ComfortBands): { level: "advice" | "action"; item: string } | null {
+  if (co2Ppm >= bands.co2HighPpm) {
+    return {
+      level: "action",
+      item: `CO₂ is ${Math.round(co2Ppm)} ppm, above ${bands.co2HighPpm} ppm. The air is stale: open doors or windows, or raise the fresh-air supply.`,
+    };
+  }
+  if (co2Ppm >= bands.co2WarnPpm) {
+    return {
+      level: "advice",
+      item: `CO₂ is ${Math.round(co2Ppm)} ppm, above ${bands.co2WarnPpm} ppm. Ventilation is falling behind the number of people in the room.`,
+    };
+  }
+  return null;
+}
 
 /**
  * Rough share of extra cooling per degree a room is kept colder than needed.

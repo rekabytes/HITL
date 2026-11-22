@@ -175,6 +175,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 .room-card .top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
 .room-card .code { font-weight: 700; font-size: 1.02rem; letter-spacing: 0.01em; }
 .room-card .where { color: var(--muted); font-size: 0.82rem; margin-top: 0.1rem; display: flex; align-items: center; gap: 0.3rem; }
+.co2-metric { margin-bottom: 0.8rem; }
 .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 0.9rem 0 0.8rem; }
 .metric { background: var(--panel-soft); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.55rem 0.7rem; }
 .metric .m-label { display: flex; align-items: center; gap: 0.3rem; color: var(--muted); font-size: 0.74rem; font-weight: 500; }

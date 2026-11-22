@@ -56,6 +56,23 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
   );
 }
 
+export function Co2Chart({ data }: { data: { label: string; ppm: number | null }[] }) {
+  if (!data.some((point) => point.ppm !== null)) return <NoData text="No CO₂ readings in this range." />;
+  return (
+    <div className="chart">
+      <ResponsiveContainer>
+        <LineChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 8 }}>
+          <CartesianGrid stroke="#eef2f0" vertical={false} />
+          <XAxis dataKey="label" tick={AXIS} tickLine={false} axisLine={{ stroke: "#e4eae7" }} minTickGap={28} />
+          <YAxis tick={AXIS} tickLine={false} axisLine={false} domain={[0, "auto"]} unit=" ppm" />
+          <Tooltip {...TOOLTIP} />
+          <Line dataKey="ppm" name="CO₂ (ppm)" stroke="#0b8061" dot={{ r: 2 }} strokeWidth={2} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export interface VotePoint {
   label: string;
   tooCold: number;

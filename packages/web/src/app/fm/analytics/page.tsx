@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { sql, type SQL } from "drizzle-orm";
-import { TrendChart, VotesChart, type TrendPoint, type VotePoint } from "@/components/Charts";
+import { Co2Chart, TrendChart, VotesChart, type TrendPoint, type VotePoint } from "@/components/Charts";
 import { Icon } from "@/components/Icon";
 import { PageHeader, PanelHead } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
@@ -34,7 +34,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const voteBucket = rangeKey === "24h" ? "hour" : "day";
   const voteFmt = rangeKey === "24h" ? "HH24:00" : "DD Mon";
 
-  const [trend, votes, bands] = await Promise.all([
+  const [trend, co2, votes, bands] = await Promise.all([
     // Bucket in a subquery and group by position: bound parameters repeated in
     // SELECT and GROUP BY would not count as the same expression to Postgres.
     db().execute<{ label: string; t: number | null; h: number | null }>(sql`
@@ -46,6 +46,17 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         where recorded_at >= ${sinceIso}::timestamptz ${roomFilter}
         group by 1
       ) x order by b`),
+    db().execute<{ label: string; ppm: number | null }>(sql`
+      with samples as (
+        select date_trunc(${range.bucket}, recorded_at at time zone ${tz}) as b,
+               round(avg(co2_ppm))::int as ppm
+        from co2_readings
+        where recorded_at >= ${sinceIso}::timestamptz ${roomFilter}
+        group by 1
+      )
+      select to_char(bucket, ${range.fmt}) as label, samples.ppm
+      from generate_series((select min(b) from samples), (select max(b) from samples), ('1 ' || ${range.bucket})::interval) as bucket
+      left join samples on samples.b = bucket order by bucket`),
     db().execute<{ label: string; too_cold: number; perfect: number; too_hot: number }>(sql`
       select to_char(b, ${voteFmt}) as label, too_cold, perfect, too_hot from (
         select date_trunc(${voteBucket}, created_at at time zone ${tz}) as b,
@@ -100,6 +111,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <section className="panel">
         <PanelHead icon="thermometer" title="Temperature and humidity" />
         <TrendChart data={trendData} />
+      </section>
+      <section className="panel mt">
+        <PanelHead icon="activity" title="CO₂ over time" />
+        <Co2Chart data={[...co2]} />
       </section>
       <div className="grid grid-2 mt">
         <section className="panel">

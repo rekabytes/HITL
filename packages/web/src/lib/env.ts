@@ -45,6 +45,8 @@ export const env = {
       tempMaxC: number("COMFORT_TEMP_MAX_C", 26),
       humidityMinPct: number("COMFORT_HUMIDITY_MIN_PCT", 40),
       humidityMaxPct: number("COMFORT_HUMIDITY_MAX_PCT", 70),
+      co2WarnPpm: number("CO2_WARN_PPM", 1000),
+      co2HighPpm: number("CO2_HIGH_PPM", 1500),
     };
   },
   /** Open, unacknowledged alerts older than this are escalated to critical and emailed again. */

@@ -119,6 +119,14 @@ export async function checkReadingAlerts(roomId: string, temperatureC: number, h
   }
 }
 
+/** Opens a CO2 alert when the room's air is stale. Critical once it is far above the limit. */
+export async function checkCo2Alerts(roomId: string, co2Ppm: number) {
+  const { co2HighPpm } = env.bands;
+  if (co2Ppm < co2HighPpm) return;
+  await raiseAutoAlert(roomId, "co2", co2Ppm >= co2HighPpm + 1000 ? "critical" : "warning",
+    `CO₂ is ${Math.round(co2Ppm)} ppm, above the ${co2HighPpm} ppm limit. The room needs fresh air.`);
+}
+
 /** Raises a feedback alert when most recent votes in a room say too hot or too cold. */
 export async function checkFeedbackAlerts(roomId: string) {
   const since = new Date(Date.now() - FEEDBACK_WINDOW_MIN * 60_000);

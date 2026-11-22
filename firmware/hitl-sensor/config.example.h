@@ -20,6 +20,8 @@
 // Seconds between readings. The portal expects 30 to 60.
 #define POST_INTERVAL_S 60
 
+// Uncomment for the SC8-CO2-5K. Connect its TX to this ESP32 input.
+// #define CO2_RX_PIN 16
 
 // HTTPS only. Paste the server's root CA certificate (PEM) to check who you are
 // talking to. Leave it empty to skip the check: the traffic is still

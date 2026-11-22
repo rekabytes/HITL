@@ -1,8 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { rooms, sensorReadings, sensorRooms, sensors } from "@hitl/db";
+import { co2Readings, rooms, sensorReadings, sensorRooms, sensors } from "@hitl/db";
 import { db } from "./db";
 
-import { deviceStatus } from "@hitl/shared";
+import { co2Status, deviceStatus, type Co2Status } from "@hitl/shared";
 
 export type PublicSensorStatus = {
   deviceId: string;
@@ -21,6 +21,7 @@ export type PublicSensorStatus = {
     humidityPct: number | null;
     pressureHpa: number | null;
   };
+  co2: { status: Co2Status; lastReadingAt: string | null; ppm: number | null };
   rooms: string[];
 };
 
@@ -73,9 +74,18 @@ export async function publicSensorStatuses(deviceId?: string): Promise<PublicSen
     if (row.sensorId) latestBySensor.set(row.sensorId, row);
   }
 
+  const latestCo2 = await db()
+    .selectDistinctOn([co2Readings.sensorId], { sensorId: co2Readings.sensorId, ppm: co2Readings.co2Ppm })
+    .from(co2Readings)
+    .innerJoin(sensors, and(eq(sensors.id, co2Readings.sensorId), eq(sensors.lastCo2ReadingAt, co2Readings.recordedAt)))
+    .where(inArray(co2Readings.sensorId, ids))
+    .orderBy(co2Readings.sensorId);
+  const co2BySensor = new Map(latestCo2.map((row) => [row.sensorId, row.ppm]));
+  const now = Date.now();
+
   return sensorRows.map((sensor: SensorRow) => {
     const latest = latestBySensor.get(sensor.id);
-    const status = deviceStatus(sensor);
+    const status = deviceStatus(sensor, now);
     return {
       deviceId: sensor.deviceId,
       label: sensor.label,
@@ -92,6 +102,11 @@ export async function publicSensorStatuses(deviceId?: string): Promise<PublicSen
         temperatureC: latest?.temperatureC ?? null,
         humidityPct: latest?.humidityPct ?? null,
         pressureHpa: latest?.pressureHpa ?? null,
+      },
+      co2: {
+        status: co2Status(sensor, now),
+        lastReadingAt: sensor.lastCo2ReadingAt?.toISOString() ?? null,
+        ppm: co2BySensor.get(sensor.id) ?? null,
       },
       rooms: (roomsBySensor.get(sensor.id) ?? []).sort(),
     };

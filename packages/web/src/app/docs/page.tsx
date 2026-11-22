@@ -73,7 +73,7 @@ export default function DocsPage() {
 }`}</CodeBlock>
         </Endpoint>
 
-        <Endpoint method="GET" path="/v1/sensor-status" description="Returns the last real reading and hardware status for every registered sensor.">
+        <Endpoint method="GET" path="/v1/sensor-status" description="Returns hardware status and last readings for the BME280 and optional CO₂ sensor.">
           <div className="api-subhead"><PanelHead title="Optional query" /></div>
           <p className="api-note"><code>?deviceId=esp32-l21-prod-a</code> filters the response to one sensor.</p>
           <CodeBlock>{`{
@@ -91,6 +91,7 @@ export default function DocsPage() {
     "temperatureC": 26.38,
     "humidityPct": 58.45,
     "pressureHpa": 1005.7,
+    "co2": { "status": "online", "lastReadingAt": "...", "ppm": 413 },
     "rooms": ["L21"]
   }]
 }`}</CodeBlock>
@@ -106,6 +107,7 @@ export default function DocsPage() {
             <dt>Sensor online</dt><dd>The connected ESP32 successfully read the BME280.</dd>
             <dt>Sensor offline</dt><dd>The connected ESP32 could not read the BME280.</dd>
             <dt>Sensor unknown</dt><dd>The ESP32 is offline or has not reported a sensor check.</dd>
+            <dt>CO₂</dt><dd>Reported separately. In addition to online, offline, unknown and inactive, CO₂ can be warming_up or not_installed (no CO₂ check reported by the connected firmware). The last ppm value can be historical.</dd>
             <dt>Inactive</dt><dd>Device is disabled in the admin.</dd>
             <dt>Never reported</dt><dd>No accepted timestamp or reading exists.</dd>
           </dl>

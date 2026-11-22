@@ -2,7 +2,7 @@ import { sensorReportInput } from "@hitl/shared";
 import { secretHash } from "@/lib/auth";
 import { json, problem, readJson } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
-import { ingestReading, recordSensorFailure, sensorByKeyHash } from "@/lib/readings";
+import { ingestSensorReport, sensorByKeyHash } from "@/lib/readings";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +24,12 @@ export async function POST(req: Request) {
   if (!body.ok) return body.response;
 
   const report = body.data;
+  // The CO2 check is independent of the BME280: record it whatever the BME280 did.
+  const co2 = "sensorStatus" in report ? report.co2 : undefined;
+  const co2Reply = co2 ? { co2Status: co2.status } : {};
+  const { roomIds } = await ingestSensorReport(sensor, report);
   if ("sensorStatus" in report && report.sensorStatus === "offline") {
-    await recordSensorFailure(sensor, report.firmwareVersion);
-    return json({ status: "heartbeat", sensorStatus: "offline" });
+    return json({ status: "heartbeat", sensorStatus: "offline", ...co2Reply });
   }
-  const { roomIds } = "sensorStatus" in report
-    ? await ingestReading(sensor, report.reading, report.firmwareVersion)
-    : await ingestReading(sensor, report);
-  return json({ status: "stored", roomIds, assigned: roomIds.length > 0 });
+  return json({ status: "stored", roomIds, assigned: roomIds.length > 0, ...co2Reply });
 }

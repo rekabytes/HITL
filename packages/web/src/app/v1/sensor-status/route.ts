@@ -39,6 +39,7 @@ export async function GET(req: Request) {
         temperatureC: sensor.sensor.temperatureC,
         humidityPct: sensor.sensor.humidityPct,
         pressureHpa: sensor.sensor.pressureHpa,
+        co2: sensor.co2,
         rooms: sensor.rooms,
       })),
     });

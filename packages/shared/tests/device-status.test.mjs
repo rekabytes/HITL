@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deviceStatus } from "../src/device-status.ts";
+import { co2Status, deviceStatus } from "../src/device-status.ts";
 
 const now = Date.parse("2026-11-22T12:00:00Z");
 const recent = new Date(now - 60_000);
@@ -16,4 +16,15 @@ const cases = [
 ];
 for (const [name, overrides, esp32, sensor] of cases) {
   test(name, () => assert.deepEqual(deviceStatus({ ...base, ...overrides }, now), { esp32, sensor }));
+}
+
+for (const [name, overrides, status] of [
+  ["missing CO2 reports", { co2State: null }, "not_installed"],
+  ["CO2 works even when the BME280 fails", { sensorResponding: false }, "online"],
+  ["CO2 warm-up", { co2State: "warming_up" }, "warming_up"],
+  ["CO2 failure", { co2State: "offline" }, "offline"],
+  ["CO2 unknown when heartbeat expires", { lastHeartbeatAt: expired }, "unknown"],
+  ["CO2 status for a disabled board", { active: false }, "inactive"],
+]) {
+  test(name, () => assert.equal(co2Status({ ...base, co2State: "online", ...overrides }, now), status));
 }
