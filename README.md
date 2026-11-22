@@ -4,7 +4,7 @@ Human-in-the-loop environmental monitoring for buildings. ESP32 devices with SHT
 
 This repo is the rewrite of the Streamlit + Flutter + FastAPI + MongoDB final-year project into one monorepo. The Flutter app is replaced by an installable web app (PWA) in the same Next.js project.
 
-Production: [https://hitl.reka-bytes.my](https://hitl.reka-bytes.my) · [Public API reference](https://hitl.reka-bytes.my/docs)
+Production: [https://hitl.reka-bytes.my](https://hitl.reka-bytes.my) · [Public API reference](https://hitl.reka-bytes.my/docs) · [Current state and changelog](docs/current-state.md)
 
 ## Packages
 

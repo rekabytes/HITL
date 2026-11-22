@@ -20,11 +20,9 @@ the end.
 
 ## Step 1: read what the firmware already says (no flashing)
 
-```powershell
-Set-Location $env:USERPROFILE
-& "\\wsl.localhost\ubuntu\home\cidex\Github\HITL\.claude\skills\arduino-cli\scripts\serial-log.ps1" -Seconds 75
-```
-Note the firmware version and every `[bme]` / `[co2]` line. `No sensor found`
+Follow the [Arduino CLI serial-log steps](../arduino-cli/SKILL.md#read-the-serial-log-the-main-way-to-check-anything): run the Windows-local copy of the helper on the confirmed port with `-NoReset`.
+
+Note the firmware version and any sensor detection lines, including `[sht3x]`, `[bme]`, and `[co2]` where applicable. `No sensor found`
 only means "no BME280 at 0x76/0x77". It does not mean "nothing is there".
 
 ## Step 2: run the identification sketch
@@ -39,9 +37,9 @@ $a = "$env:ProgramFiles\Arduino CLI\arduino-cli.exe"
 $dir = "$env:USERPROFILE\hitl-firmware\identify"
 New-Item -ItemType Directory -Force $dir | Out-Null
 Copy-Item "\\wsl.localhost\ubuntu\home\cidex\Github\HITL\.claude\skills\identify-sensor\sketches\identify\identify.ino" $dir -Force
-& $a compile --fqbn esp32:esp32:esp32 -u -p COM9 $dir
-& "\\wsl.localhost\ubuntu\home\cidex\Github\HITL\.claude\skills\arduino-cli\scripts\serial-log.ps1" -Seconds 20 | Select-String '\[identify\]'
 ```
+
+Follow the [mandatory flash workflow](../windows-esp32-flash/SKILL.md) for a separate diagnostic compile and upload. Use the confirmed board and port, get explicit approval, and have the production restoration build ready first. Check the sketch's bus and pins against the selected board before running it; the values above are not universal. After uploading, read the confirmed port with `serial-log.ps1 -Port <confirmed-port> -Seconds 20` and look for `[identify]`. Use `-NoReset` when a reset is not authorized. Verify each expected sensor after restoring the production firmware.
 
 Typical output:
 ```

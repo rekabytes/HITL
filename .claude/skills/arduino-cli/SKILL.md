@@ -10,6 +10,8 @@ plugs into the **Windows** side of the dev laptop. WSL cannot see USB serial
 ports, so every arduino-cli and serial command runs in **Windows PowerShell**,
 never in WSL bash.
 
+Before staging or uploading any firmware, follow the [mandatory flash hard rules](../windows-esp32-flash/SKILL.md#hard-rules--stop-if-a-gate-fails). Confirm the target board and its independent sensor inventory, validate every expected sensor in the build, and verify each one separately after upload. This also applies to key-only changes and temporary diagnostic uploads. The board, ports, and sensors shown below are examples, not defaults for another device.
+
 ## Ground rules
 
 - **Read before you flash.** Most questions ("is the sensor detected?", "is it
@@ -49,10 +51,11 @@ overwrite its `config.h`:
 ```powershell
 Set-Location $env:USERPROFILE
 $src = "\\wsl.localhost\ubuntu\home\cidex\Github\HITL\firmware\hitl-sensor"
-$dst = "$env:USERPROFILE\hitl-firmware\hitl-sensor"
-New-Item -ItemType Directory -Force $dst | Out-Null
-Get-ChildItem $src -File | Where-Object Name -ne 'config.h' | Copy-Item -Destination $dst -Force
-if (-not (Test-Path "$dst\config.h")) { Copy-Item "$dst\config.example.h" "$dst\config.h" }  # then the user fills it in
+# $dst must be the confirmed board-specific Windows sketch directory.
+if (-not $dst -or -not (Test-Path -LiteralPath (Join-Path $dst 'config.h') -PathType Leaf)) {
+  throw 'Confirmed board-specific private config.h required'
+}
+Get-ChildItem -LiteralPath $src -File | Where-Object Name -ne 'config.h' | Copy-Item -Destination $dst -Force
 ```
 
 Copy every file in the sketch folder (`*.ino` and every `*.h`, for example
@@ -64,33 +67,30 @@ Copy every file in the sketch folder (`*.ino` and every `*.h`, for example
 ```powershell
 & "$env:ProgramFiles\Arduino CLI\arduino-cli.exe" board list
 ```
-The ESP32 is the line whose type is `Serial Port (USB)`, usually `COM9` on this
-laptop. COM3/COM6/COM7 are Bluetooth and Intel AMT, not the board. If no USB
+`Serial Port (USB)` identifies candidate ports, not a specific board. Match the
+physical board to its inventory before selecting a port. If no USB
 line appears: cable unplugged, a charge-only cable, or a short on the board
 (Windows cuts power to the port). Check for a missing driver with
 `Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -ne 0 -or $_.PNPDeviceID -match 'VID_1A86|VID_10C4|VID_303A' }`.
 
 ### Read the serial log (the main way to check anything)
 ```powershell
-Set-Location $env:USERPROFILE
-& "\\wsl.localhost\ubuntu\home\cidex\Github\HITL\.claude\skills\arduino-cli\scripts\serial-log.ps1" -Seconds 75
+Set-Location -LiteralPath $env:USERPROFILE
+if (-not $port) { throw 'Confirmed board port required' }
+# $serialHelper must be the path to a fresh Windows-local copy of scripts/serial-log.ps1.
+if (-not $serialHelper -or -not (Test-Path -LiteralPath $serialHelper -PathType Leaf)) {
+  throw 'Windows-local serial helper required'
+}
+& $serialHelper -Port $port -Seconds 75 -NoReset
 ```
-The script finds the board, **restarts it** (so the start-up lines are
-included) and prints the log. Use at least 70 seconds: after start-up the
-firmware prints only once per report cycle (`POST_INTERVAL_S`, 60 s). A short
-read that shows nothing usually just missed the cycle. `-NoReset` reads without
-restarting.
+Copy the repo helper to a Windows-local directory before running it. Direct
+execution from WSL UNC can be blocked; do not change execution policy to work
+around it. Set `$port` to the confirmed board's current port. Use a capture window long
+enough for its configured report interval. Remove `-NoReset` only when a board
+restart is authorized and startup logs are needed.
 
 ### Compile and upload
-```powershell
-Set-Location $env:USERPROFILE
-$a = "$env:ProgramFiles\Arduino CLI\arduino-cli.exe"
-& $a compile --fqbn esp32:esp32:esp32 -u -p COM9 "$env:USERPROFILE\hitl-firmware\hitl-sensor"
-```
-`-u -p` uploads after a successful compile. Success ends with
-`Hash of data verified.` and `Hard resetting via RTS pin...`. If it stalls at
-`Connecting...`, hold the board's **BOOT** button until writing starts. Then read
-the serial log to confirm the new version string (`HITL sensor hitl-x.y.z`).
+Follow [Reliable Windows ESP32 flashing](../windows-esp32-flash/SKILL.md#3-stage-compile-upload-and-verify-separately) to compile first and upload the exact build separately after approval. A successful ESP32 upload typically ends with `Hash of data verified.` and `Hard resetting via RTS pin...`. If the upload stalls at `Connecting...` on the confirmed port, ask the operator to hold **BOOT** until writing starts. Use serial and the production status API to verify ingestion; the firmware version alone is not enough.
 
 ### Install or update the toolchain
 ```powershell
@@ -135,9 +135,9 @@ $a = "$env:ProgramFiles\Arduino CLI\arduino-cli.exe"
 $scan = "$env:USERPROFILE\hitl-firmware\i2c-scan"
 New-Item -ItemType Directory -Force $scan | Out-Null
 Copy-Item "\\wsl.localhost\ubuntu\home\cidex\Github\HITL\.claude\skills\arduino-cli\sketches\i2c-scan\i2c-scan.ino" $scan -Force
-& $a compile --fqbn esp32:esp32:esp32 -u -p COM9 $scan
-& "\\wsl.localhost\ubuntu\home\cidex\Github\HITL\.claude\skills\arduino-cli\scripts\serial-log.ps1" -Seconds 15 -NoReset
 ```
+
+Use the [mandatory flash workflow](../windows-esp32-flash/SKILL.md) for a separate diagnostic compile and upload, with the confirmed FQBN and port and an approved restoration plan. Read the scanner output with `serial-log.ps1 -Port <confirmed-port> -Seconds 15 -NoReset`.
 
 | Scan result | Meaning |
 |---|---|
