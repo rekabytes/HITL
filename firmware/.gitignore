@@ -1,0 +1,3 @@
+# Holds the Wi-Fi password and device key.
+config.h
+build/

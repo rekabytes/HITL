@@ -4,6 +4,8 @@
 2. Put the portal URL and the key in the firmware.
 3. Post a reading every 30 to 60 seconds.
 
+Ready-to-flash firmware is in [`firmware/hitl-sensor`](../firmware/README.md): it finds the BME280 at either address, reconnects Wi-Fi, retries failed posts and explains errors on the serial log. The minimal sketch below shows the protocol.
+
 The JSON body keeps the field names the old firmware used, so the only firmware change is the header.
 
 ```cpp
